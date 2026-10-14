@@ -1,7 +1,7 @@
 // Supabase Edge Function: tile-recognition proxy. Keeps the Gemini API key off the client.
 // Accepts POST {image: <base64 jpeg>, mode: 'single'|'hand'} and returns the JSON the PWA expects.
 // Tried in order; a busy or missing model falls through to the next.
-const MODELS = ['gemini-flash-latest', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
+const MODELS = ['gemini-flash-latest', 'gemini-2.5-flash'];
 const ALLOWED_ORIGINS = ['https://leonasdv.github.io', 'http://localhost:5173'];
 
 const TILE_GUIDE = `Tile set guide (Indonesian J2 league set, ivory tiles, tiles may be rotated 90 degrees):
@@ -49,11 +49,13 @@ Deno.serve(async (req: Request) => {
     let lastErr = '';
     for (const model of MODELS) {
       for (let attempt = 0; attempt < 2; attempt++) {
-        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+        let r: Response;
+        try { r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
           method: 'POST',
           headers: { 'x-goog-api-key': Deno.env.get('GEMINI_API_KEY') ?? '', 'content-type': 'application/json' },
           body: payload,
-        });
+          signal: AbortSignal.timeout(25_000),
+        }); } catch (e) { lastErr = `${model}: ${(e as Error).name}`; continue; } // timeout/network: next attempt
         if (r.ok) { res = r; break; }
         lastErr = `${model} ${r.status}: ${(await r.text()).slice(0, 200)}`;
         if (r.status !== 503 && r.status !== 429) break; // retry only when busy
