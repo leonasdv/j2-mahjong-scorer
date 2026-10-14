@@ -1,6 +1,6 @@
-// Supabase Edge Function: tile-recognition proxy. Keeps the Anthropic API key off the client.
+// Supabase Edge Function: tile-recognition proxy. Keeps the Gemini API key off the client.
 // Accepts POST {image: <base64 jpeg>, mode: 'single'|'hand'} and returns the JSON the PWA expects.
-const MODEL = 'claude-sonnet-5-5';
+const MODEL = 'gemini-2.5-flash';
 const ALLOWED_ORIGINS = ['https://leonasdv.github.io', 'http://localhost:5173'];
 
 const TILE_GUIDE = `Tile set guide (Indonesian J2 league set, ivory tiles, tiles may be rotated 90 degrees):
@@ -37,21 +37,20 @@ Deno.serve(async (req: Request) => {
     if (typeof image !== 'string' || !PROMPTS[mode]) return json({ error: 'Need image (base64) and mode (single|hand)' }, 400);
     if (image.length > 6_000_000) return json({ error: 'Image too large' }, 413);
 
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
       method: 'POST',
-      headers: { 'x-api-key': Deno.env.get("ANTHROPIC_API_KEY") ?? "", 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      headers: { 'x-goog-api-key': Deno.env.get('GEMINI_API_KEY') ?? '', 'content-type': 'application/json' },
       body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 1024,
-        messages: [{ role: 'user', content: [
-          { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: image } },
-          { type: 'text', text: PROMPTS[mode] },
+        contents: [{ parts: [
+          { inline_data: { mime_type: 'image/jpeg', data: image } },
+          { text: PROMPTS[mode] },
         ] }],
+        generationConfig: { responseMimeType: 'application/json', temperature: 0 },
       }),
     });
     if (!res.ok) return json({ error: 'Upstream ' + res.status }, 502);
     const data = await res.json();
-    const text = (data.content || []).map((c: any) => c.text || '').join('');
+    const text = (data.candidates?.[0]?.content?.parts ?? []).map((p: any) => p.text || '').join('');
     const m = text.match(/\{[\s\S]*\}/);
     if (!m) return json({ error: 'No JSON in model reply' }, 502);
     try { return json(JSON.parse(m[0])); } catch { return json({ error: 'Unparseable model reply' }, 502); }
