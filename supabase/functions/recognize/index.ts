@@ -1,7 +1,7 @@
-// Supabase Edge Function: tile-recognition proxy. Keeps the Gemini API key off the client.
+// Supabase Edge Function: tile-recognition proxy. Keeps the OpenAI API key off the client.
 // Accepts POST {image: <base64 jpeg>, mode: 'single'|'hand'} and returns the JSON the PWA expects.
 // Tried in order; a busy or missing model falls through to the next.
-const MODELS = ['gemini-2.5-flash', 'gemini-flash-latest'];
+const MODELS = ['gpt-4.1', 'gpt-4o'];
 const ALLOWED_ORIGINS = ['https://leonasdv.github.io', 'http://localhost:5173'];
 
 const TILE_GUIDE = `Tile set guide (Indonesian J2 league set, ivory tiles, tiles may be rotated 90 degrees):
@@ -38,34 +38,37 @@ Deno.serve(async (req: Request) => {
     if (typeof image !== 'string' || !PROMPTS[mode]) return json({ error: 'Need image (base64) and mode (single|hand)' }, 400);
     if (image.length > 6_000_000) return json({ error: 'Image too large' }, 413);
 
-    const payload = JSON.stringify({
-      contents: [{ parts: [
-        { inline_data: { mime_type: 'image/jpeg', data: image } },
-        { text: PROMPTS[mode] },
-      ] }],
-      generationConfig: { responseMimeType: 'application/json', temperature: 0, thinkingConfig: { thinkingBudget: 0 } }, // no thinking: much faster
-    });
-    let res: Response | null = null;
+    const dataUrl = `data:image/jpeg;base64,${image}`;
+    let text = '';
     let lastErr = '';
     for (const model of MODELS) {
-      for (let attempt = 0; attempt < 2; attempt++) {
+      for (let attempt = 0; attempt < 2 && !text; attempt++) {
         let r: Response;
-        try { r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-          method: 'POST',
-          headers: { 'x-goog-api-key': Deno.env.get('GEMINI_API_KEY') ?? '', 'content-type': 'application/json' },
-          body: payload,
-          signal: AbortSignal.timeout(25_000),
-        }); } catch (e) { lastErr = `${model}: ${(e as Error).name}`; continue; } // timeout/network: next attempt
-        if (r.ok) { res = r; break; }
+        try {
+          r = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY') ?? ''}`, 'content-type': 'application/json' },
+            body: JSON.stringify({
+              model,
+              temperature: 0,
+              max_tokens: 1024,
+              response_format: { type: 'json_object' },
+              messages: [{ role: 'user', content: [
+                { type: 'text', text: PROMPTS[mode] },
+                { type: 'image_url', image_url: { url: dataUrl, detail: 'high' } },
+              ] }],
+            }),
+            signal: AbortSignal.timeout(25_000),
+          });
+        } catch (e) { lastErr = `${model}: ${(e as Error).name}`; continue; } // timeout/network: next attempt
+        if (r.ok) { text = (await r.json()).choices?.[0]?.message?.content ?? ''; break; }
         lastErr = `${model} ${r.status}: ${(await r.text()).slice(0, 200)}`;
         if (r.status !== 503 && r.status !== 429) break; // retry only when busy
         await new Promise(ok => setTimeout(ok, 800));
       }
-      if (res) break;
+      if (text) break;
     }
-    if (!res) return json({ error: 'Upstream failed', detail: lastErr }, 502);
-    const data = await res.json();
-    const text = (data.candidates?.[0]?.content?.parts ?? []).map((p: any) => p.text || '').join('');
+    if (!text) return json({ error: 'Upstream failed', detail: lastErr }, 502);
     const m = text.match(/\{[\s\S]*\}/);
     if (!m) return json({ error: 'No JSON in model reply' }, 502);
     try { return json(JSON.parse(m[0])); } catch { return json({ error: 'Unparseable model reply' }, 502); }

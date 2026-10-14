@@ -47,12 +47,12 @@ The API key for recognition must stay on the server. Never call the Claude API d
 
 ## Enable photo reading on GitHub Pages
 
-Photo reading needs a small proxy so the Gemini API key never reaches the browser. `supabase/functions/recognize` is a Supabase Edge Function that does this.
+Photo reading needs a small proxy so the OpenAI API key never reaches the browser. `supabase/functions/recognize` is a Supabase Edge Function that does this.
 
 ```
 npx supabase login
 npx supabase link --project-ref <your-project-ref>
-npx supabase secrets set GEMINI_API_KEY=<your key>
+npx supabase secrets set OPENAI_API_KEY=<your key>
 npx supabase functions deploy recognize --no-verify-jwt
 ```
 
