@@ -245,7 +245,7 @@ function DbStore(db){
 /* ================= tile recognition ================= */
 // In the published artifact this uses Claude vision. In a standalone deploy, set RECOGNIZE_URL
 // to a backend endpoint that accepts {image: base64, mode} and returns the same JSON.
-const RECOGNIZE_URL = '';
+const RECOGNIZE_URL = 'https://pfqgjhgaasacjlpcwggh.supabase.co/functions/v1/recognize';
 let sampleFn = null;
 const TILE_GUIDE = `Tile set guide (Indonesian J2 league set, ivory tiles, tiles may be rotated 90 degrees):
 - Characters "m": black Chinese numeral on top (一 二 三 四 伍 六 七 八 九) above a red 萬. Codes 1m..9m. No Arabic numbers on these tiles.
