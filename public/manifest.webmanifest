@@ -1,0 +1,14 @@
+{
+  "name": "J2 Mahjong Scorer",
+  "short_name": "J2 Scorer",
+  "description": "Photograph a winning mahjong hand and score it with the J2 Mahjong League rules.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0c2a20",
+  "theme_color": "#0d2e23",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

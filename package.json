@@ -1,0 +1,10 @@
+{
+  "name": "j2-mahjong-scorer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PWA that reads a photo of a winning mahjong hand and scores it with the J2 Mahjong League rules.",
+  "scripts": {
+    "start": "npx --yes serve public -l 5173",
+    "test": "node tests/scoring.test.js"
+  }
+}

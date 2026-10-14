@@ -1,0 +1,679 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d2e23">
+<title>J2 Mahjong Scorer</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Albert+Sans:wght@400;500;600;700&family=Shippori+Mincho:wght@600;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+<style>
+:root{
+  --bg:#e8ece3; --surface:#ffffff; --surface-2:#f2f4ee; --line:#d3d9cc;
+  --text:#17261f; --muted:#5b6b62; --accent:#145c40; --accent-ink:#ffffff;
+  --gold:#9c7726; --danger:#b3261e; --good:#1d7a45;
+  --tile:#f8f4e8; --tile-edge:#2c7a50; --tile-shadow:rgba(20,40,30,.25);
+  --ink:#1b1b1b; --t-red:#c3262f; --t-green:#24753a; --t-blue:#1d2b5a;
+  --serif:"Shippori Mincho","Songti SC","Noto Serif CJK SC",serif;
+  --sans:"Albert Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  color-scheme:light;
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0c2a20; --surface:#123a2c; --surface-2:#174535; --line:#245a46;
+  --text:#edf2ea; --muted:#9fb8aa; --accent:#e2c26e; --accent-ink:#13241c;
+  --gold:#e2c26e; --danger:#ff8a80; --good:#7fd6a2; --tile-shadow:rgba(0,0,0,.45);
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0c2a20; --surface:#123a2c; --surface-2:#174535; --line:#245a46;
+  --text:#edf2ea; --muted:#9fb8aa; --accent:#e2c26e; --accent-ink:#13241c;
+  --gold:#e2c26e; --danger:#ff8a80; --good:#7fd6a2; --tile-shadow:rgba(0,0,0,.45);
+  color-scheme:dark;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:inherit}
+html,body{margin:0;min-height:100%}
+body{background:var(--bg);color:var(--text);font:16px/1.5 var(--sans);-webkit-tap-highlight-color:transparent}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+.wrap{max-width:560px;margin:0 auto;padding:16px 16px 96px}
+h1,h2,h3{font-family:var(--serif);font-weight:800;line-height:1.15;margin:0}
+h1{font-size:2rem}
+h2{font-size:1.35rem}
+h3{font-size:1.05rem}
+p{margin:.4em 0}
+.muted{color:var(--muted)}
+.small{font-size:.875rem}
+.row{display:flex;gap:10px;align-items:center}
+.spread{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.stack>*+*{margin-top:12px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px}
+.btn{appearance:none;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:10px 14px;font-weight:600;cursor:pointer;min-height:44px}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.ghost{background:transparent}
+.btn.block{width:100%}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.link{background:none;border:0;padding:6px 0;color:var(--accent);font-weight:600;cursor:pointer}
+input[type=text],select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);min-height:44px}
+label.field{display:block;font-weight:600;font-size:.9rem;margin-bottom:6px}
+.topbar{display:flex;align-items:center;gap:8px;margin-bottom:18px}
+.topbar .title{flex:1;min-width:0}
+.back{min-width:44px;min-height:44px;border-radius:10px;border:1px solid var(--line);background:var(--surface);cursor:pointer;font-size:1.2rem}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:999px;border:1px solid var(--line);background:var(--surface);cursor:pointer;min-height:40px;font-weight:600}
+.chip[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--text);color:var(--bg);padding:10px 16px;border-radius:10px;font-weight:600;z-index:50;max-width:90vw}
+.err{color:var(--danger);font-weight:600}
+
+/* ---------- the tiles ---------- */
+.tile{--w:40px;width:var(--w);height:calc(var(--w)*1.36);background:var(--tile);border-radius:calc(var(--w)*.14);
+  box-shadow:0 calc(var(--w)*.09) 0 var(--tile-edge),0 calc(var(--w)*.12) calc(var(--w)*.2) var(--tile-shadow);
+  display:inline-flex;align-items:center;justify-content:center;position:relative;flex:none;user-select:none;-webkit-user-select:none;
+  border:1px solid rgba(0,0,0,.06);margin-bottom:calc(var(--w)*.1);touch-action:none;color:var(--ink)}
+.tile svg{width:86%;height:86%}
+.tile .cj{font-family:var(--serif);font-weight:800;line-height:1;display:flex;flex-direction:column;align-items:center}
+.tile .cj .n{font-size:calc(var(--w)*.42);color:var(--ink)}
+.tile .cj .m{font-size:calc(var(--w)*.46);color:var(--t-red)}
+.tile .big{font-family:var(--serif);font-weight:800;font-size:calc(var(--w)*.7);line-height:1}
+.tile .fl{position:absolute;inset:0;font-family:var(--serif);font-weight:800}
+.tile .fl .num{position:absolute;top:6%;right:12%;font-family:var(--sans);font-weight:700;font-size:calc(var(--w)*.3)}
+.tile .fl .ch{position:absolute;top:6%;left:10%;font-size:calc(var(--w)*.3)}
+.tile .fl .bl{position:absolute;bottom:8%;left:0;right:0;text-align:center;font-size:calc(var(--w)*.5)}
+.tile.joker::after{content:"J";position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:var(--gold);color:#fff;
+  font:700 11px/18px var(--sans);text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.tile.lg{--w:56px}.tile.sm{--w:30px}
+button.tile{cursor:pointer;padding:0}
+.tiles{display:flex;flex-wrap:wrap;gap:6px;align-items:flex-end}
+
+/* ---------- home ---------- */
+.hero{padding:26px 0 18px}
+.hero h1{font-size:2.4rem;letter-spacing:.01em}
+.hero .tiles{margin-top:14px;gap:4px}
+.match{display:block;width:100%;text-align:left;cursor:pointer}
+.match + .match{margin-top:10px}
+.live{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--good);margin-right:6px;vertical-align:middle}
+
+/* ---------- scoreboard ---------- */
+.board{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.seat{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;position:relative}
+.seat .wind{font-family:var(--serif);font-weight:800;font-size:1.6rem;line-height:1;color:var(--muted)}
+.seat.dealer{border-color:var(--gold);box-shadow:inset 0 0 0 1px var(--gold)}
+.seat .pts{font-size:1.7rem;font-weight:700;font-variant-numeric:tabular-nums}
+.seat .nm{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tag{font-size:.75rem;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--surface-2);border:1px solid var(--line)}
+.hand-row{border-top:1px solid var(--line);padding:12px 0}
+.hand-row:first-child{border-top:0}
+.delta{font-variant-numeric:tabular-nums;font-weight:700}
+.delta.pos{color:var(--good)}.delta.neg{color:var(--danger)}
+details summary{cursor:pointer;color:var(--accent);font-weight:600;padding:4px 0}
+
+/* ---------- scoring flow ---------- */
+.steps{display:flex;gap:6px;margin:-6px 0 16px}
+.steps span{flex:1;height:4px;border-radius:2px;background:var(--line)}
+.steps span.on{background:var(--accent)}
+.zone{background:var(--surface);border:1px dashed var(--line);border-radius:14px;padding:12px;margin-bottom:12px}
+.zone h3{font-family:var(--sans);font-weight:700;font-size:.95rem;margin-bottom:8px}
+.dropline{min-height:62px;display:flex;flex-wrap:wrap;gap:6px;align-items:flex-end;padding:4px;border-radius:10px;background:var(--surface-2)}
+.dropline:empty::before{content:attr(data-empty);color:var(--muted);font-size:.85rem;align-self:center;padding:0 6px}
+.sortable-ghost{opacity:.35}
+.sortable-chosen .tile,.sortable-chosen.tile{transform:translateY(-4px)}
+.addtile{width:40px;height:54px;border-radius:6px;border:1.5px dashed var(--muted);background:transparent;cursor:pointer;color:var(--muted);font-size:1.4rem;margin-bottom:4px}
+.setbox + .setbox{margin-top:8px}
+.photo-drop{border:2px dashed var(--line);border-radius:16px;padding:26px 16px;text-align:center;background:var(--surface)}
+.preview{width:100%;border-radius:12px;display:block;margin-top:12px;max-height:280px;object-fit:contain;background:var(--surface-2)}
+.result-total{font-family:var(--serif);font-weight:800;font-size:3.2rem;line-height:1}
+.items{list-style:none;padding:0;margin:0}
+.items li{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid var(--line)}
+.items li:first-child{border-top:0}
+.items .no{color:var(--muted);font-variant-numeric:tabular-nums;margin-right:6px}
+.check{display:flex;gap:10px;align-items:center;padding:8px 0;min-height:44px;cursor:pointer}
+.check input{width:22px;height:22px;accent-color:var(--accent)}
+
+/* ---------- sheet ---------- */
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:40;display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:var(--surface);width:100%;max-width:560px;max-height:86vh;overflow:auto;border-radius:18px 18px 0 0;padding:16px 16px calc(20px + env(safe-area-inset-bottom,0px))}
+.picker{display:grid;grid-template-columns:repeat(9,1fr);gap:6px;justify-items:center}
+.picker .tile{--w:34px}
+.picker-label{font-weight:700;font-size:.85rem;margin:12px 0 6px;color:var(--muted)}
+.spinner{width:38px;height:38px;border-radius:50%;border:4px solid var(--line);border-top-color:var(--accent);animation:spin 1s linear infinite;margin:10px auto}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spinner{animation-duration:3s}}
+@media (max-width:380px){.picker .tile{--w:30px}.tile{--w:36px}}
+</style>
+</head>
+<body>
+<div id="app" class="wrap" aria-live="polite"></div>
+<div id="layer"></div>
+
+<script src="scoring.js"></script>
+<script>
+"use strict";
+const {KINDS, FLOWERS, WINDS} = J2;
+const WIND_CH = ['東','南','西','北'];
+const WIND_EN = ['East','South','West','North'];
+const CN_NUM = ['一','二','三','四','伍','六','七','八','九'];
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let uid = 0; const nid = () => 't' + (++uid);
+
+/* ================= tile faces ================= */
+const PIPS = {
+  1:[[20,28]],2:[[20,15],[20,41]],3:[[10,12],[20,28],[30,44]],4:[[12,16],[28,16],[12,40],[28,40]],
+  5:[[11,13],[29,13],[20,28],[11,43],[29,43]],6:[[12,12],[28,12],[12,28],[28,28],[12,44],[28,44]],
+  7:[[8,9],[20,15],[32,21],[12,34],[28,34],[12,47],[28,47]],8:[[12,8],[28,8],[12,21],[28,21],[12,35],[28,35],[12,48],[28,48]],
+  9:[[9,11],[20,11],[31,11],[9,28],[20,28],[31,28],[9,45],[20,45],[31,45]]};
+const PIPCOL = {1:['g'],2:['r','g'],3:['g','r','g'],4:['g','b','b','g'],5:['g','b','r','b','g'],6:['g','g','r','r','r','r'],7:['g','g','g','r','r','r','r'],8:['b','b','b','b','b','b','b','b'],9:['g','r','g','g','r','g','g','r','g']};
+const COL = {g:'var(--t-green)',r:'var(--t-red)',b:'var(--t-blue)'};
+function circlesSvg(n){
+  const r = n===1?13:n<=4?7:n<=6?6:5.2;
+  return `<svg viewBox="0 0 40 56" aria-hidden="true">${PIPS[n].map(([x,y],i)=>{const c=COL[PIPCOL[n][i]];
+    return `<circle cx="${x}" cy="${y}" r="${r}" fill="none" stroke="${c}" stroke-width="${n===1?2.4:1.8}"/><circle cx="${x}" cy="${y}" r="${r*.45}" fill="none" stroke="${c}" stroke-width="1.4"/>`}).join('')}</svg>`;
+}
+const STICKS = {2:[[20,15],[20,41]],3:[[20,15],[12,41],[28,41]],4:[[12,15],[28,15],[12,41],[28,41]],5:[[10,15],[30,15],[20,28],[10,41],[30,41]],
+  6:[[9,15],[20,15],[31,15],[9,41],[20,41],[31,41]],7:[[20,9],[9,30],[20,30],[31,30],[9,47],[20,47],[31,47]],
+  8:[[7,15],[16,15],[24,15],[33,15],[7,41],[16,41],[24,41],[33,41]],9:[[9,10],[20,10],[31,10],[9,28],[20,28],[31,28],[9,46],[20,46],[31,46]]};
+function bambooSvg(n){
+  if(n===1) return `<span class="big" style="color:var(--t-green)">雀</span>`;
+  const h = n>=7?13:17;
+  return `<svg viewBox="0 0 40 56" aria-hidden="true">${STICKS[n].map(([x,y],i)=>{
+    const red = (n===5&&i===2)||(n===7&&i===0)||(n===9&&i%3===1);
+    const c = red?'var(--t-red)':'var(--t-green)';
+    return `<rect x="${x-2.6}" y="${y-h/2}" width="5.2" height="${h}" rx="2.6" fill="none" stroke="${c}" stroke-width="1.6"/><line x1="${x-2.6}" x2="${x+2.6}" y1="${y}" y2="${y}" stroke="${c}" stroke-width="1.4"/>`}).join('')}</svg>`;
+}
+function face(code){
+  if(/^[1-9]m$/.test(code)){const n=+code[0];return `<span class="cj"><span class="n">${CN_NUM[n-1]}</span><span class="m">萬</span></span>`}
+  if(/^[1-9]p$/.test(code)) return circlesSvg(+code[0]);
+  if(/^[1-9]s$/.test(code)) return bambooSvg(+code[0]);
+  if(WINDS.includes(code)) return `<span class="big">${WIND_CH[WINDS.indexOf(code)]}</span>`;
+  if(code==='RD') return `<span class="big" style="color:var(--t-red)">中</span>`;
+  if(code==='GD') return `<span class="big" style="color:var(--t-green)">發</span>`;
+  if(code==='WD') return `<svg viewBox="0 0 40 56" aria-hidden="true"><rect x="7" y="7" width="26" height="42" rx="2" fill="none" stroke="var(--t-blue)" stroke-width="2.4"/><rect x="11" y="11" width="18" height="34" fill="none" stroke="var(--t-blue)" stroke-width="1"/></svg>`;
+  if(/^bf[1-4]$/.test(code)){const n=+code[2];return `<span class="fl"><span class="ch" style="color:var(--t-red)">${'梅蘭菊竹'[n-1]}</span><span class="num" style="color:var(--ink)">${n}</span><span class="bl" style="color:var(--t-green)">✿</span></span>`}
+  if(/^rf[1-4]$/.test(code)){const n=+code[2];return `<span class="fl"><span class="num" style="color:var(--t-red);left:12%;right:auto">${n}</span><span class="ch" style="color:var(--ink);left:auto;right:10%">${'春夏秋冬'[n-1]}</span><span class="bl" style="color:var(--t-red)">✿</span></span>`}
+  return '?';
+}
+function tileName(code){
+  if(/^[1-9]m$/.test(code)) return code[0]+' character';
+  if(/^[1-9]p$/.test(code)) return code[0]+' circle';
+  if(/^[1-9]s$/.test(code)) return code[0]+' bamboo';
+  if(WINDS.includes(code)) return WIND_EN[WINDS.indexOf(code)]+' wind';
+  return {RD:'Red dragon',GD:'Green dragon',WD:'White dragon'}[code] || (code.startsWith('bf')?'Black flower '+code[2]:code.startsWith('rf')?'Red flower '+code[2]:code);
+}
+function tileHTML(code,{joker,size='',tag='span',attrs=''}={}){
+  const j = joker && code===joker;
+  return `<${tag} class="tile ${size}${j?' joker':''}" ${tag==='button'?'type="button"':''} aria-label="${esc(tileName(code))}${j?' (joker)':''}" ${attrs}>${face(code)}</${tag}>`;
+}
+
+/* ================= storage adapters ================= */
+// Shared, live store via the artifact runtime; falls back to this-device storage.
+function LocalStore(){
+  const KEY='j2-mahjong-v1'; const subs=new Set();
+  const read=()=>{try{return JSON.parse(localStorage.getItem(KEY))||{matches:{},hands:{}}}catch{return {matches:{},hands:{}}}};
+  const write=d=>{try{localStorage.setItem(KEY,JSON.stringify(d))}catch{} subs.forEach(f=>f())};
+  window.addEventListener('storage',e=>{if(e.key===KEY)subs.forEach(f=>f())});
+  const sub=fn=>{subs.add(fn);fn();return()=>subs.delete(fn)};
+  return {
+    shared:false,
+    listMatches:cb=>sub(()=>{const d=read();cb(Object.entries(d.matches).map(([id,m])=>({id,...m})).sort((a,b)=>b.createdAt-a.createdAt))}),
+    watchMatch:(id,cb)=>sub(()=>{const m=read().matches[id];cb(m?{id,...m}:null)}),
+    watchHands:(id,cb)=>sub(()=>{const h=read().hands[id]||{};cb(Object.entries(h).map(([hid,x])=>({id:hid,...x})).sort((a,b)=>a.createdAt-b.createdAt))}),
+    async createMatch(m){const d=read();const id='m'+Date.now().toString(36);d.matches[id]=m;write(d);return id},
+    async updateMatch(id,p){const d=read();Object.assign(d.matches[id],p);write(d)},
+    async addHand(id,h){const d=read();(d.hands[id]=d.hands[id]||{})['h'+Date.now().toString(36)]=h;write(d)},
+  };
+}
+function DbStore(db){
+  const snapList = s => s.docs.map(d=>({id:d.id,...d.data()}));
+  return {
+    shared:true,
+    listMatches:cb=>db.collection('matches').orderBy('createdAt','desc').limit(40).onSnapshot(s=>cb(snapList(s)),e=>{toast('Could not load matches: '+e.message);cb([])}),
+    watchMatch:(id,cb)=>db.doc('matches/'+id).onSnapshot(s=>cb(s.exists?{id,...s.data()}:null)),
+    watchHands:(id,cb)=>db.collection('matches/'+id+'/hands').orderBy('createdAt','asc').onSnapshot(s=>cb(snapList(s))),
+    async createMatch(m){const ref=await db.collection('matches').add(m);return ref.id},
+    async updateMatch(id,p){await db.doc('matches/'+id).update(p)},
+    async addHand(id,h){await db.collection('matches/'+id+'/hands').add(h)},
+  };
+}
+
+/* ================= tile recognition ================= */
+// In the published artifact this uses Claude vision. In a standalone deploy, set RECOGNIZE_URL
+// to a backend endpoint that accepts {image: base64, mode} and returns the same JSON.
+const RECOGNIZE_URL = '';
+let sampleFn = null;
+const TILE_GUIDE = `Tile set guide (Indonesian J2 league set, ivory tiles, tiles may be rotated 90 degrees):
+- Characters "m": black Chinese numeral on top (一 二 三 四 伍 六 七 八 九) above a red 萬. Codes 1m..9m. No Arabic numbers on these tiles.
+- Circles "p": 1 to 9 round pips (the 1 is one big ornate circle). Count pips carefully: 7 has 3 diagonal + 4, 8 has two columns of four, 9 is 3x3. Codes 1p..9p.
+- Bamboo "s": 1 is a bird; 2 to 9 are green sticks (some red); 8 has two zig-zag/M shapes. Count sticks. Codes 1s..9s.
+- Winds: black 東 E, 南 S, 西 W, 北 N.
+- Dragons: red 中 = RD, green 發 = GD, empty framed rectangle = WD.
+- Flowers: BLACK numeral 1-4 with red character 梅 蘭 菊 竹 = bf1..bf4. RED numeral 1-4 with black character 春 夏 秋 冬 = rf1..rf4. Decide black vs red by the NUMERAL colour.`;
+async function recognize(blob, mode){
+  if(sampleFn){
+    const prompt = mode==='single'
+      ? `${TILE_GUIDE}\n\nThe photo shows ONE mahjong tile. Reply with JSON only: {"tile":"<code>"}`
+      : `${TILE_GUIDE}\n\nThe photo shows a player's winning mahjong hand on a table. Identify every tile face. Flowers go in "flowers". If some tiles are clearly laid apart as revealed sets of 3 or 4 (chow/pong/kong), put each such set in "groups"; put all other tiles in "hand" in left-to-right order. Ignore face-down tiles. Reply with JSON only: {"flowers":["..."],"groups":[["..."]],"hand":["..."]}`;
+    return await sampleFn.json(prompt,{images:[blob],modelTier:'default'});
+  }
+  if(RECOGNIZE_URL){
+    const b64 = await new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result.split(',')[1]);fr.readAsDataURL(blob)});
+    const res = await fetch(RECOGNIZE_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:b64,mode})});
+    if(!res.ok) throw new Error('Recognition service returned '+res.status);
+    return await res.json();
+  }
+  throw new Error('Photo recognition is not available here. Add tiles by hand.');
+}
+async function shrink(file){
+  const bmp = await createImageBitmap(file);
+  const s = Math.min(1, 1600/Math.max(bmp.width,bmp.height));
+  const c = document.createElement('canvas'); c.width=Math.round(bmp.width*s); c.height=Math.round(bmp.height*s);
+  c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);
+  return await new Promise(r=>c.toBlob(r,'image/jpeg',.85));
+}
+const validCode = c => KINDS.includes(c) || FLOWERS.includes(c);
+
+/* ================= app state ================= */
+const S = { store:LocalStore(), me:{id:null,name:''}, canPhoto:false, route:{name:'home'}, unsub:[], matches:[], match:null, hands:[], flow:null };
+function go(route){ S.unsub.forEach(u=>u&&u()); S.unsub=[]; S.route=route; S.flow=null; mount(); window.scrollTo(0,0); }
+function toast(msg){ const t=document.createElement('div'); t.className='toast'; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),2800); }
+
+function mount(){
+  const r=S.route;
+  if(r.name==='home'){ S.unsub.push(S.store.listMatches(m=>{S.matches=m;render()})); }
+  if(r.name==='match'){
+    S.match=null; S.hands=[];
+    S.unsub.push(S.store.watchMatch(r.id,m=>{S.match=m;render()}));
+    S.unsub.push(S.store.watchHands(r.id,h=>{S.hands=h;render()}));
+  }
+  render();
+}
+function render(){
+  const r=S.route, app=$('#app');
+  if(S.flow) return renderFlow();
+  if(r.name==='home') app.innerHTML=homeView();
+  else if(r.name==='new') app.innerHTML=newView();
+  else if(r.name==='match') app.innerHTML=matchView();
+  bind();
+}
+
+/* ================= home ================= */
+function homeView(){
+  const list = S.matches.length ? S.matches.map(m=>`
+    <button class="panel match" data-open="${esc(m.id)}">
+      <div class="spread"><h3>${esc(m.name||'Untitled match')}</h3>${tileHTML(m.joker,{joker:m.joker,size:'sm'})}</div>
+      <div class="small muted">${esc((m.players||[]).join(', '))}</div>
+      <div class="small muted">${S.store.shared?'<span class="live"></span>Live · ':''}Hand ${m.hand||1}, ${WIND_EN[m.roundWind||0]} round</div>
+    </button>`).join('')
+    : `<div class="panel"><p>No matches yet. Start one, then share this page so the other players can follow along on their phones.</p></div>`;
+  return `
+  <header class="hero">
+    <h1>J2 Mahjong Scorer</h1>
+    <p class="muted">Snap the winning hand. The app reads the tiles and scores it with the J2 league rules.</p>
+    <div class="tiles" aria-hidden="true">${['RD','GD','WD','E','5p','8s','9m'].map(c=>tileHTML(c,{size:'sm'})).join('')}</div>
+  </header>
+  <div class="spread" style="margin-bottom:12px"><h2>Matches</h2><button class="btn primary" data-act="new">New match</button></div>
+  ${list}
+  <p class="small muted" style="margin-top:20px">${S.store.shared?`Signed in${S.me.name?' as '+esc(S.me.name):''}. Matches are shared live with everyone who opens this page.`:'Saved on this device only. Open the published page to share matches live.'}</p>`;
+}
+
+/* ================= new match ================= */
+let NM = null;
+function newView(){
+  NM = NM || {name:'', players:['','','',''], joker:null, rule:'losers-pay'};
+  return `
+  <div class="topbar"><button class="back" data-act="home" aria-label="Back">‹</button><h2 class="title">New match</h2></div>
+  <div class="stack">
+    <div><label class="field" for="nm-name">Match name</label><input type="text" id="nm-name" value="${esc(NM.name)}" placeholder="Friday table"></div>
+    <div class="panel stack">
+      <h3>Players</h3>
+      <p class="small muted">In seat order. The first player starts as dealer (East).</p>
+      ${NM.players.map((p,i)=>`<div class="row"><span class="tile sm" aria-hidden="true">${face(WINDS[i])}</span><input type="text" data-player="${i}" value="${esc(p)}" placeholder="Player ${i+1}${i>1?' (optional)':''}" aria-label="Player ${i+1}"></div>`).join('')}
+    </div>
+    <div class="panel stack">
+      <div class="spread"><h3>Joker tile</h3>${NM.joker?tileHTML(NM.joker,{joker:NM.joker,size:'lg'}):''}</div>
+      <p class="small muted">All four copies of this tile count as jokers for the whole match.</p>
+      <div class="row">
+        <button class="btn" data-act="pick-joker">Choose tile</button>
+        ${S.canPhoto?`<label class="btn" style="display:inline-flex;align-items:center">Photo of tile<input type="file" accept="image/*" capture="environment" id="joker-photo" hidden></label>`:''}
+      </div>
+      <div id="joker-status" class="small"></div>
+    </div>
+    <div class="panel stack">
+      <h3>Payments</h3>
+      <label class="check"><input type="radio" name="rule" value="losers-pay" ${NM.rule==='losers-pay'?'checked':''}> Discarder pays; on self-draw everyone pays</label>
+      <label class="check"><input type="radio" name="rule" value="tally" ${NM.rule==='tally'?'checked':''}> Winner's points only (running tally)</label>
+    </div>
+    <div id="nm-err" class="err"></div>
+    <button class="btn primary block" data-act="create">Start match</button>
+  </div>`;
+}
+
+/* ================= match ================= */
+function seatWind(m,i){ const n=m.players.length; return (i - (m.dealer||0) + n) % n; }
+function totals(m,hands){ const t=m.players.map(()=>0); hands.forEach(h=>(h.deltas||[]).forEach((d,i)=>t[i]+=d)); return t; }
+function matchView(){
+  const m=S.match;
+  if(!m) return `<div class="topbar"><button class="back" data-act="home" aria-label="Back">‹</button><h2 class="title">Loading match…</h2></div><div class="spinner"></div>`;
+  const t=totals(m,S.hands);
+  const hands=[...S.hands].reverse().map(h=>{
+    if(h.draw) return `<div class="hand-row"><div class="spread"><strong>Hand ${h.n}: draw</strong><span class="small muted">${WIND_EN[h.roundWind]} round</span></div></div>`;
+    return `<div class="hand-row">
+      <div class="spread"><strong>Hand ${h.n}: ${esc(m.players[h.winner])} wins ${h.total} pts${h.kv3?' (KV.3 ×4)':''}</strong></div>
+      <div class="small muted">${h.selfDraw?'Self-draw':'On '+esc(m.players[h.discarder])+'\u2019s discard'} · ${WIND_EN[h.roundWind]} round</div>
+      <div class="small" style="margin-top:4px">${h.deltas.map((d,i)=>`${esc(m.players[i])} <span class="delta ${d>0?'pos':d<0?'neg':''}">${d>0?'+':''}${d}</span>`).join(' · ')}</div>
+      <details><summary>Breakdown</summary>
+        ${h.tiles?`<div class="tiles" style="margin:8px 0">${[...(h.tiles.flowers||[]),...(h.tiles.exposed||[]).flatMap(g=>g.tiles),...(h.tiles.concealed||[])].map(c=>tileHTML(c,{joker:m.joker,size:'sm'})).join('')}</div>`:''}
+        <ul class="items small">${h.items.map(i=>`<li><span><span class="no">#${i.no}</span>${esc(i.name)}</span><strong>+${i.pts}</strong></li>`).join('')}</ul>
+      </details></div>`;
+  }).join('');
+  return `
+  <div class="topbar"><button class="back" data-act="home" aria-label="Back">‹</button>
+    <div class="title"><h2>${esc(m.name||'Match')}</h2><div class="small muted">${S.store.shared?'<span class="live"></span>Live · ':''}Hand ${m.hand||1} · ${WIND_EN[m.roundWind||0]} round</div></div>
+    <div title="Joker">${tileHTML(m.joker,{joker:m.joker})}</div></div>
+  <div class="board">${m.players.map((p,i)=>{const w=seatWind(m,i);return `
+    <div class="seat ${w===0?'dealer':''}">
+      <div class="spread"><span class="wind" aria-label="${WIND_EN[w]} seat">${WIND_CH[w]}</span>${w===0?'<span class="tag">Dealer</span>':''}</div>
+      <div class="nm">${esc(p)}</div><div class="pts">${t[i]>0?'+':''}${t[i]}</div>
+    </div>`}).join('')}</div>
+  <div class="row" style="margin:16px 0">
+    <button class="btn primary" style="flex:1" data-act="score">Score a win</button>
+    <button class="btn" data-act="draw">Record draw</button>
+  </div>
+  <div class="panel"><h3>Hands</h3>${hands||'<p class="muted">No hands scored yet.</p>'}</div>`;
+}
+
+/* ================= scoring flow ================= */
+// step: photo -> tiles -> confirm -> result
+function startFlow(){
+  S.flow={step:'photo',img:null,busy:false,error:'',draft:{flowers:[],exposed:[],concealed:[]},ctx:null,result:null};
+  render();
+}
+const T = c => ({id:nid(),code:c});
+function draftFromRecognition(r){
+  const fl=[],ex=[],hd=[];
+  const clean=a=>(Array.isArray(a)?a:[]).map(String).filter(validCode);
+  clean(r.flowers).forEach(c=>fl.push(T(c)));
+  (Array.isArray(r.groups)?r.groups:[]).forEach(g=>{const t=clean(g); if(t.length) ex.push({id:nid(),concealedKong:false,tiles:t.map(T)})});
+  clean(r.hand).forEach(c=>(FLOWERS.includes(c)?fl:hd).push(T(c)));
+  return {flowers:fl,exposed:ex,concealed:hd};
+}
+function stepsBar(i){return `<div class="steps" aria-hidden="true">${[0,1,2,3].map(k=>`<span class="${k<=i?'on':''}"></span>`).join('')}</div>`}
+function renderFlow(){
+  const f=S.flow, m=S.match, app=$('#app');
+  const head=(title,back)=>`<div class="topbar"><button class="back" data-flow="${back}" aria-label="Back">‹</button><h2 class="title">${title}</h2></div>`;
+  if(f.step==='photo'){
+    app.innerHTML=`${head('Winning hand','cancel')}${stepsBar(0)}
+      <div class="photo-drop stack">
+        ${f.busy?`<div class="spinner"></div><p>Reading tiles…</p>`:`
+        <p><strong>Photograph the winning hand</strong></p>
+        <p class="small muted">Lay flowers and revealed sets slightly apart from the hand. Any angle works; avoid strong glare.</p>
+        ${S.canPhoto?`<div class="row" style="justify-content:center;flex-wrap:wrap">
+          <label class="btn primary">Take photo<input type="file" accept="image/*" capture="environment" id="hand-photo" hidden></label>
+          <label class="btn">Upload photo<input type="file" accept="image/*" id="hand-upload" hidden></label></div>`
+          :`<p class="small muted">Photo reading isn't available in this view.</p>`}
+        <button class="link" data-flow="manual">Enter tiles by hand instead</button>`}
+        ${f.img?`<img class="preview" src="${f.img}" alt="Your photo">`:''}
+        ${f.error?`<p class="err">${esc(f.error)}</p>`:''}
+      </div>`;
+  }
+  if(f.step==='tiles'){
+    const d=f.draft, j=m.joker;
+    const line=(key,arr,empty)=>`<div class="dropline" data-zone="${key}" data-empty="${empty}">${arr.map(t=>tileHTML(t.code,{joker:j,tag:'button',attrs:`data-tid="${t.id}"`})).join('')}</div>`;
+    const check=J2.score({joker:j,flowers:d.flowers.map(t=>t.code),exposed:d.exposed.map(g=>({tiles:g.tiles.map(t=>t.code),concealedKong:g.concealedKong})),concealed:d.concealed.map(t=>t.code)},{seatWind:0,roundWind:0,seatNo:1,selfDraw:false,extras:{}});
+    app.innerHTML=`${head('Check the tiles','photo')}${stepsBar(1)}
+      <p class="small muted">Drag tiles to reorder or move them between rows. Tap a tile to replace or remove it.</p>
+      <div class="zone"><div class="spread"><h3>Flowers</h3><button class="addtile" data-add="flowers" aria-label="Add flower">+</button></div>${line('flowers',d.flowers,'No flowers')}</div>
+      <div class="zone"><div class="spread"><h3>Revealed sets</h3><button class="btn ghost small" data-flow="newset">Add set</button></div>
+        ${d.exposed.length?d.exposed.map((g,i)=>`<div class="setbox">
+          <div class="spread small"><span class="muted">Set ${i+1}</span>
+            <span class="row">${g.tiles.length===4?`<label class="row small"><input type="checkbox" data-ck="${g.id}" ${g.concealedKong?'checked':''}> Concealed kong</label>`:''}
+            <button class="addtile" data-add="${g.id}" aria-label="Add tile to set ${i+1}" style="height:36px;width:32px">+</button></span></div>
+          ${line(g.id,g.tiles,'Drop tiles here')}</div>`).join(''):'<p class="small muted">None: a concealed hand.</p>'}
+      </div>
+      <div class="zone"><div class="spread"><h3>Hand</h3><button class="addtile" data-add="concealed" aria-label="Add tile to hand">+</button></div>${line('concealed',d.concealed,'Add tiles')}</div>
+      <p class="${check.ok?'small muted':'err small'}">${check.ok?'Valid winning hand ('+check.structure.replace('-',' ')+').':esc(check.error)}</p>
+      <button class="btn primary block" data-flow="toconfirm">Confirm tiles</button>`;
+    bindSortables();
+  }
+  if(f.step==='confirm'){
+    const c=f.ctx, n=m.players.length;
+    const x=c.extras;
+    const opt=(k,label)=>`<label class="check"><input type="checkbox" data-x="${k}" ${x[k]?'checked':''}> ${label}</label>`;
+    app.innerHTML=`${head('How did they win?','tiles')}${stepsBar(2)}
+      <div class="stack">
+      <div class="panel stack"><h3>Winner</h3><div class="chips">${m.players.map((p,i)=>`<button class="chip" aria-pressed="${c.winner===i}" data-winner="${i}">${esc(p)}</button>`).join('')}</div>
+        ${c.winner!=null?`<p class="small muted">${WIND_EN[seatWind(m,c.winner)]} seat (flower no. ${seatWind(m,c.winner)+1}), ${WIND_EN[m.roundWind||0]} round</p>`:''}</div>
+      <div class="panel stack"><h3>Winning tile came from</h3><div class="chips">
+        <button class="chip" aria-pressed="${c.selfDraw}" data-from="self">Self-draw</button>
+        ${m.players.map((p,i)=>i===c.winner?'':`<button class="chip" aria-pressed="${!c.selfDraw&&c.discarder===i}" data-from="${i}">${esc(p)}'s discard</button>`).join('')}</div></div>
+      <div class="panel"><h3>Special situations</h3>
+        ${opt('replacement','Replacement tile from the wall tail (#20)')}${opt('robKong','Robbed a kong (#21)')}${opt('lastTile','Last tile of the wall (#22)')}
+        ${opt('pauChin','Declared Pau-Chin (#47)')}${opt('heavenly','Heavenly hand (#45)')}${opt('earthly','Earthly hand (#46)')}
+        ${opt('instant4J','Declared the 4-joker instant win (#9)')}
+      </div>
+      ${f.error?`<p class="err">${esc(f.error)}</p>`:''}
+      <button class="btn primary block" data-flow="calc" ${c.winner==null||(!c.selfDraw&&c.discarder==null)?'disabled':''}>Calculate points</button>
+      </div>`;
+  }
+  if(f.step==='result'){
+    const r=f.result, c=f.ctx;
+    app.innerHTML=`${head('Points','confirm')}${stepsBar(3)}
+      <div class="panel stack">
+        <div class="spread"><div><div class="small muted">${esc(m.players[c.winner])} wins</div><div class="result-total">${r.total}</div></div>
+          <span class="tag">${r.structure.replace(/-/g,' ')}</span></div>
+        <ul class="items">${r.items.map(i=>`<li><span><span class="no">#${i.no}</span>${esc(i.name)}<br><span class="small muted">${esc(i.en)}</span></span><strong>+${i.pts}</strong></li>`).join('')}</ul>
+        ${r.kv3?`<p><strong>KV.3 penalty applies:</strong> ${r.base} × 4 = ${r.total}. ${esc(m.players[c.discarder])} pays the full amount.</p>`:''}
+        <label class="check small"><input type="checkbox" id="kv3" ${r.kv3?'checked':''} ${c.selfDraw?'disabled':''}> Apply KV.3 (×4) penalty</label>
+      </div>
+      <div class="panel" style="margin-top:12px"><h3>Payments</h3>
+        <ul class="items">${f.deltas.map((d,i)=>`<li><span>${esc(m.players[i])}</span><span class="delta ${d>0?'pos':d<0?'neg':''}">${d>0?'+':''}${d}</span></li>`).join('')}</ul></div>
+      <button class="btn primary block" style="margin-top:14px" data-flow="save" ${f.busy?'disabled':''}>${f.busy?'Saving…':'Save to match'}</button>`;
+  }
+  bind();
+}
+function readDraftFromDom(){
+  const f=S.flow, byId={};
+  [...f.draft.flowers,...f.draft.concealed,...f.draft.exposed.flatMap(g=>g.tiles)].forEach(t=>byId[t.id]=t);
+  const zone=k=>[...document.querySelectorAll(`[data-zone="${k}"] [data-tid]`)].map(e=>byId[e.dataset.tid]).filter(Boolean);
+  f.draft.flowers=zone('flowers'); f.draft.concealed=zone('concealed');
+  f.draft.exposed.forEach(g=>g.tiles=zone(g.id));
+  // flowers always belong in the flower row
+  const misplaced=f.draft.flowers.filter(t=>!FLOWERS.includes(t.code));
+  if(misplaced.length){f.draft.flowers=f.draft.flowers.filter(t=>FLOWERS.includes(t.code));f.draft.concealed.push(...misplaced)}
+  const strays=[...f.draft.concealed,...f.draft.exposed.flatMap(g=>g.tiles)].filter(t=>FLOWERS.includes(t.code));
+  if(strays.length){
+    f.draft.concealed=f.draft.concealed.filter(t=>!strays.includes(t));
+    f.draft.exposed.forEach(g=>g.tiles=g.tiles.filter(t=>!strays.includes(t)));
+    f.draft.flowers.push(...strays);
+  }
+  f.draft.exposed=f.draft.exposed.filter(g=>g.tiles.length||g.keep);
+  f.draft.exposed.forEach(g=>delete g.keep);
+}
+let sortables=[];
+function bindSortables(){
+  sortables.forEach(s=>s.destroy()); sortables=[];
+  if(!window.Sortable) return;
+  document.querySelectorAll('.dropline').forEach(el=>{
+    sortables.push(Sortable.create(el,{group:'tiles',animation:150,delay:120,delayOnTouchOnly:true,
+      onEnd(){ readDraftFromDom(); renderFlow(); }}));
+  });
+}
+function handFromDraft(d){return {joker:S.match.joker,flowers:d.flowers.map(t=>t.code),exposed:d.exposed.map(g=>({tiles:g.tiles.map(t=>t.code),concealedKong:g.concealedKong})),concealed:d.concealed.map(t=>t.code)}}
+function computeResult(){
+  const f=S.flow,m=S.match,c=f.ctx;
+  const w=seatWind(m,c.winner);
+  const res=J2.score(handFromDraft(f.draft),{seatWind:w,roundWind:m.roundWind||0,seatNo:w+1,selfDraw:c.selfDraw,extras:c.extras,instant4J:c.extras.instant4J,kv3Override:c.kv3Override});
+  if(!res.ok){f.error=res.error;return false}
+  f.result=res; f.deltas=J2.settle(res.total,m.players.length,c.winner,c.discarder,c.selfDraw,m.rule);
+  return true;
+}
+
+/* ================= picker sheet ================= */
+function openPicker({title,current,onPick,onRemove,moves}){
+  const groups=[['Characters',KINDS.slice(0,9)],['Circles',KINDS.slice(9,18)],['Bamboo',KINDS.slice(18,27)],['Winds & dragons',KINDS.slice(27)],['Flowers',FLOWERS]];
+  const layer=$('#layer');
+  layer.innerHTML=`<div class="scrim" data-close><div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}">
+    <div class="spread"><h3>${esc(title)}</h3><button class="btn ghost" data-close>Done</button></div>
+    ${current?`<div class="row" style="margin:10px 0">${tileHTML(current,{joker:S.match?.joker||NM?.joker})}<span class="muted">${esc(tileName(current))}</span></div>`:''}
+    ${moves&&moves.length?`<div class="chips" style="margin:6px 0">${moves.map((mv,i)=>`<button class="chip" data-move="${i}">Move to ${esc(mv.label)}</button>`).join('')}${onRemove?'<button class="chip" data-remove style="color:var(--danger)">Remove</button>':''}</div>`:onRemove?'<button class="chip" data-remove style="color:var(--danger)">Remove</button>':''}
+    ${groups.map(([g,codes])=>`<div class="picker-label">${g}</div><div class="picker">${codes.map(c=>tileHTML(c,{joker:S.match?.joker,tag:'button',attrs:`data-pick="${c}"`})).join('')}</div>`).join('')}
+  </div></div>`;
+  const close=()=>layer.innerHTML='';
+  layer.querySelector('.scrim').addEventListener('click',e=>{
+    const t=e.target.closest('[data-pick],[data-remove],[data-move],[data-close]');
+    if(e.target.classList.contains('scrim')) return close();
+    if(!t) return;
+    if(t.dataset.pick){close();onPick(t.dataset.pick)}
+    else if(t.hasAttribute('data-remove')){close();onRemove()}
+    else if(t.dataset.move!=null){close();moves[+t.dataset.move].fn()}
+    else if(t.hasAttribute('data-close')) close();
+  });
+  layer.querySelector('[data-pick]')?.focus();
+}
+
+/* ================= events ================= */
+function bind(){
+  const app=$('#app');
+  app.onclick=async e=>{
+    const el=e.target.closest('button,[data-open]'); if(!el) return;
+    const d=el.dataset;
+    if(d.open) return go({name:'match',id:d.open});
+    if(d.act==='home') return go({name:'home'});
+    if(d.act==='new'){NM=null;return go({name:'new'})}
+    if(d.act==='pick-joker'){saveNM();return openPicker({title:'Joker tile',current:NM.joker,onPick:c=>{if(FLOWERS.includes(c))return toast('Flowers cannot be the joker.');NM.joker=c;render()}})}
+    if(d.act==='create') return createMatch();
+    if(d.act==='score') return startFlow();
+    if(d.act==='draw') return recordDraw();
+    if(d.flow) return flowAction(d.flow);
+    if(d.add) return addTile(d.add);
+    if(d.tid) return editTile(d.tid);
+    if(d.winner!=null){S.flow.ctx.winner=+d.winner;if(S.flow.ctx.discarder===+d.winner)S.flow.ctx.discarder=null;return renderFlow()}
+    if(d.from!=null){const c=S.flow.ctx;if(d.from==='self'){c.selfDraw=true;c.discarder=null}else{c.selfDraw=false;c.discarder=+d.from}return renderFlow()}
+  };
+  app.onchange=async e=>{
+    const t=e.target;
+    if(t.id==='hand-photo'||t.id==='hand-upload') return handlePhoto(t.files[0]);
+    if(t.id==='joker-photo') return jokerPhoto(t.files[0]);
+    if(t.dataset.ck){const g=S.flow.draft.exposed.find(g=>g.id===t.dataset.ck);g.concealedKong=t.checked;return}
+    if(t.dataset.x){S.flow.ctx.extras[t.dataset.x]=t.checked;return}
+    if(t.id==='kv3'){S.flow.ctx.kv3Override=t.checked;computeResult();return renderFlow()}
+    if(t.name==='rule'){NM.rule=t.value}
+  };
+  app.oninput=e=>{ if(S.route.name==='new') saveNM(); };
+}
+function saveNM(){ if(!NM) return; const n=$('#nm-name'); if(n) NM.name=n.value; document.querySelectorAll('[data-player]').forEach(i=>NM.players[+i.dataset.player]=i.value); }
+async function createMatch(){
+  saveNM();
+  const players=NM.players.map(p=>p.trim()).filter(Boolean);
+  const err=$('#nm-err');
+  if(players.length<2){err.textContent='Enter at least two player names.';return}
+  if(!NM.joker){err.textContent='Choose the joker tile.';return}
+  try{
+    const id=await S.store.createMatch({name:NM.name.trim()||'Match',players,joker:NM.joker,rule:NM.rule,dealer:0,roundWind:0,hand:1,createdAt:Date.now(),createdBy:S.me.id||null});
+    NM=null; go({name:'match',id});
+  }catch(e){err.textContent='Could not create the match: '+(e.message||e.code)}
+}
+async function jokerPhoto(file){
+  if(!file) return; const st=$('#joker-status'); st.textContent='Reading tile…';
+  try{ const r=await recognize(await shrink(file),'single'); if(validCode(r.tile)&&!FLOWERS.includes(r.tile)){saveNM();NM.joker=r.tile;render();toast('Joker set to '+tileName(r.tile))} else st.textContent='Could not read that tile. Choose it from the list instead.'; }
+  catch(e){ st.textContent=e.message||'Could not read that tile.'; }
+}
+async function handlePhoto(file){
+  if(!file) return; const f=S.flow;
+  f.img=URL.createObjectURL(file); f.busy=true; f.error=''; renderFlow();
+  try{
+    const r=await recognize(await shrink(file),'hand');
+    f.draft=draftFromRecognition(r||{}); f.busy=false;
+    if(!f.draft.concealed.length&&!f.draft.exposed.length){f.error='No tiles found in that photo. Try again closer, or enter them by hand.';return renderFlow()}
+    f.step='tiles'; renderFlow();
+  }catch(e){ f.busy=false; f.error=(e.code==='not_granted'?'Allow photo reading to use this. ':'')+(e.message||'Could not read the photo.'); renderFlow(); }
+}
+function addTile(zone){
+  const f=S.flow;
+  openPicker({title:'Add a tile',onPick:c=>{
+    const t=T(c);
+    if(FLOWERS.includes(c)||zone==='flowers') { if(!FLOWERS.includes(c)) return toast('Only flowers go in the flower row.'); f.draft.flowers.push(t); }
+    else if(zone==='concealed') f.draft.concealed.push(t);
+    else f.draft.exposed.find(g=>g.id===zone).tiles.push(t);
+    renderFlow();
+  }});
+}
+function editTile(tid){
+  const f=S.flow,d=f.draft;
+  const lists=[['flowers',d.flowers],['concealed',d.concealed],...d.exposed.map(g=>[g.id,g.tiles])];
+  const [zone,arr]=lists.find(([,a])=>a.some(t=>t.id===tid)); const tile=arr.find(t=>t.id===tid);
+  const moveTo=(target)=>()=>{arr.splice(arr.indexOf(tile),1);target.push(tile);d.exposed=d.exposed.filter(g=>g.tiles.length);renderFlow()};
+  const moves=[];
+  if(zone!=='concealed'&&!FLOWERS.includes(tile.code)) moves.push({label:'hand',fn:moveTo(d.concealed)});
+  if(!FLOWERS.includes(tile.code)){
+    d.exposed.forEach((g,i)=>{if(g.id!==zone)moves.push({label:'set '+(i+1),fn:moveTo(g.tiles)})});
+    moves.push({label:'a new set',fn:()=>{const g={id:nid(),concealedKong:false,tiles:[]};d.exposed.push(g);moveTo(g.tiles)()}});
+  }
+  openPicker({title:'Replace tile',current:tile.code,moves,
+    onPick:c=>{ if(FLOWERS.includes(c)&&zone!=='flowers'){arr.splice(arr.indexOf(tile),1);d.flowers.push(T(c))} else tile.code=c; d.exposed=d.exposed.filter(g=>g.tiles.length); renderFlow(); },
+    onRemove:()=>{arr.splice(arr.indexOf(tile),1);d.exposed=d.exposed.filter(g=>g.tiles.length);renderFlow()}});
+}
+async function flowAction(a){
+  const f=S.flow;
+  if(a==='cancel'){S.flow=null;return render()}
+  if(a==='manual'){f.step='tiles';f.error='';return renderFlow()}
+  if(a==='photo'){f.step='photo';return renderFlow()}
+  if(a==='tiles'){f.step='tiles';f.error='';return renderFlow()}
+  if(a==='confirm'){f.step='confirm';f.error='';return renderFlow()}
+  if(a==='newset'){f.draft.exposed.push({id:nid(),concealedKong:false,tiles:[],keep:true});return renderFlow()}
+  if(a==='toconfirm'){
+    f.ctx=f.ctx||{winner:null,selfDraw:false,discarder:null,extras:{},kv3Override:null};
+    f.step='confirm';f.error='';return renderFlow();
+  }
+  if(a==='calc'){ f.ctx.kv3Override=null; if(computeResult()){f.error='';f.step='result'} return renderFlow(); }
+  if(a==='save') return saveHand();
+}
+async function saveHand(){
+  const f=S.flow,m=S.match,c=f.ctx,r=f.result;
+  f.busy=true; renderFlow();
+  try{
+    const n=m.players.length;
+    await S.store.addHand(m.id,{n:m.hand||1,winner:c.winner,discarder:c.selfDraw?null:c.discarder,selfDraw:c.selfDraw,total:r.total,base:r.base,kv3:r.kv3,
+      structure:r.structure,items:r.items.map(({no,name,pts})=>({no,name,pts})),deltas:f.deltas,roundWind:m.roundWind||0,dealer:m.dealer||0,
+      tiles:handFromDraft(f.draft),createdAt:Date.now(),by:S.me.id||null});
+    let dealer=m.dealer||0, rw=m.roundWind||0;
+    if(c.winner!==dealer){dealer=(dealer+1)%n; if(dealer===0) rw=(rw+1)%4;}
+    await S.store.updateMatch(m.id,{dealer,roundWind:rw,hand:(m.hand||1)+1});
+    S.flow=null; render(); toast('Hand saved');
+  }catch(e){ f.busy=false; f.error='Could not save: '+(e.message||e.code); renderFlow(); toast(f.error); }
+}
+async function recordDraw(){
+  const m=S.match;
+  const b=document.querySelector('[data-act="draw"]');
+  if(b && !b.dataset.armed){b.dataset.armed='1';b.textContent='Tap again to confirm';setTimeout(()=>{if(b.isConnected){delete b.dataset.armed;b.textContent='Record draw'}},3000);return}
+  try{
+    await S.store.addHand(m.id,{n:m.hand||1,draw:true,deltas:m.players.map(()=>0),items:[],roundWind:m.roundWind||0,dealer:m.dealer||0,createdAt:Date.now(),by:S.me.id||null});
+    await S.store.updateMatch(m.id,{hand:(m.hand||1)+1});
+    toast('Draw recorded. The dealer stays.');
+  }catch(e){toast('Could not save: '+(e.message||e.code))}
+}
+
+/* ================= boot ================= */
+go({name:'home'});
+(async()=>{
+  if(!window.claude?.use) return;
+  const [db,user,sample]=await Promise.all([claude.use('db'),claude.use('user'),claude.use('sample')]);
+  if(sample){ try{ const lim=await sample.limits(); if(lim.images){sampleFn=sample;S.canPhoto=true} }catch{} }
+  if(!S.canPhoto && RECOGNIZE_URL) S.canPhoto=true;
+  if(user){ try{ const me=await user.me(); S.me={id:me.id,name:me.name||''} }catch{} }
+  if(db){ S.store=DbStore(db); go(S.route.name==='match'?S.route:{name:S.route.name==='new'?'new':'home'}); }
+  else render();
+})();
+if(!window.claude?.use && RECOGNIZE_URL) S.canPhoto=true;
+if('serviceWorker' in navigator && window.top===window && location.protocol==='https:' && document.querySelector('link[rel=manifest]')){
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+</script>
+</body>
+</html>
