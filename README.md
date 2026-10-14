@@ -45,9 +45,23 @@ The API key for recognition must stay on the server. Never call the Claude API d
 6. **#24 Joker pair** applies only to the pair of a standard hand, not to seven pairs.
 7. **KV.3 trigger** is detected automatically from the revealed sets and can be overridden on the Points screen.
 
-## Enable photo reading on GitHub Pages
+## Photo reading
 
-Photo reading needs a small proxy so the Gemini API key never reaches the browser. `supabase/functions/recognize` is a Supabase Edge Function that does this.
+Photos are read on the device. `public/tilematch.js` finds the ivory tiles in the photo (it straightens the tilt, splits touching tiles at their seams) and matches each one against features of the league's own tile set in `public/refs.json`. No network is needed and it takes well under a second.
+
+The cloud model is now only a fallback: tiles the matcher is not sure of (low score, or too close a second guess) are sent one at a time to the Gemini proxy below, and if no tiles can be found at all the whole photo is sent. Without the proxy the best local guess is kept and the user corrects it on the tiles screen. Revealed sets are no longer detected from the photo; everything but flowers lands in the hand row and is dragged into sets there.
+
+Rebuild the references after adding or replacing photos in `image/`. The script expects the tile-group photos listed in `PHOTOS` plus 42 one-tile close-ups (WhatsApp `15.35.xx`, sorted by time: 1m-9m, 1p-9p, 1s-9s, E S W N, GD WD RD, bf1-4, rf1-4):
+
+```
+npm i --no-save jpeg-js pngjs
+npm run build:refs -- --sheet contact.png   # contact.png shows every cropped reference tile, to check orientation
+npm test
+```
+
+### Optional cloud fallback
+
+The proxy keeps the Gemini API key out of the browser. `supabase/functions/recognize` is a Supabase Edge Function that does this.
 
 ```
 npx supabase login

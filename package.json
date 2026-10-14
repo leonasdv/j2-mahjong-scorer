@@ -5,6 +5,11 @@
   "description": "PWA that reads a photo of a winning mahjong hand and scores it with the J2 Mahjong League rules.",
   "scripts": {
     "start": "npx --yes serve public -l 5173",
-    "test": "node tests/scoring.test.js"
+    "test": "node tests/scoring.test.js && node tests/tilematch.test.js",
+    "build:refs": "node tools/build-refs.js"
+  },
+  "devDependencies": {
+    "jpeg-js": "^0.4.4",
+    "pngjs": "^7.0.0"
   }
 }

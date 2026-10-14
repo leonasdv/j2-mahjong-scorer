@@ -153,6 +153,7 @@ details summary{cursor:pointer;color:var(--accent);font-weight:600;padding:4px 0
 <div id="layer"></div>
 
 <script src="scoring.js"></script>
+<script src="tilematch.js"></script>
 <script>
 "use strict";
 const {KINDS, FLOWERS, WINDS} = J2;
@@ -254,7 +255,7 @@ const TILE_GUIDE = `Tile set guide (Indonesian J2 league set, ivory tiles, tiles
 - Winds: black 東 E, 南 S, 西 W, 北 N.
 - Dragons: red 中 = RD, green 發 = GD, empty framed rectangle = WD.
 - Flowers: BLACK numeral 1-4 with red character 梅 蘭 菊 竹 = bf1..bf4. RED numeral 1-4 with black character 春 夏 秋 冬 = rf1..rf4. Decide black vs red by the NUMERAL colour.`;
-async function recognize(blob, mode){
+async function recognizeRemote(blob, mode){
   if(sampleFn){
     const prompt = mode==='single'
       ? `${TILE_GUIDE}\n\nThe photo shows ONE mahjong tile. Reply with JSON only: {"tile":"<code>"}`
@@ -269,6 +270,55 @@ async function recognize(blob, mode){
   }
   throw new Error('Photo recognition is not available here. Add tiles by hand.');
 }
+const remoteAvailable = () => !!(sampleFn || RECOGNIZE_URL);
+
+/* Local recognition: tiles are found in the photo and matched against features of the league's own tile set
+   (refs.json, built from image/ by tools/build-refs.js). The cloud model is only asked about tiles the
+   local matcher is unsure of, or about the whole photo when no tiles could be found. */
+let localRefs = null;
+function loadLocalRefs(){
+  return localRefs || (localRefs = fetch('refs.json').then(r=>{ if(!r.ok) throw new Error('refs.json '+r.status); return r.json() })
+    .then(j=>{ const refs=TileMatch.loadRefs(j); return {refs, W:TileMatch.weightsFrom(refs)} })
+    .catch(e=>{ localRefs=null; throw e }));
+}
+async function rgbaOf(blob){
+  const bmp = await createImageBitmap(blob);
+  const c = document.createElement('canvas'); c.width=bmp.width; c.height=bmp.height;
+  const x = c.getContext('2d',{willReadFrequently:true}); x.drawImage(bmp,0,0);
+  return x.getImageData(0,0,c.width,c.height);
+}
+function tileBlob(rgba){
+  const c = document.createElement('canvas'); c.width=rgba.width; c.height=rgba.height;
+  c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(rgba.data),rgba.width,rgba.height),0,0);
+  return new Promise(r=>c.toBlob(r,'image/jpeg',.9));
+}
+async function recognizeLocal(blob, mode){
+  if(!window.TileMatch) return null;
+  const [{refs,W}, img] = await Promise.all([loadLocalRefs(), rgbaOf(blob)]);
+  const {image, tiles} = TileMatch.recognizeTiles(img, refs, W, mode==='single' ? {open:2} : undefined); // one tile: clean the mask hard (fabric tables)
+  if(!tiles.length || tiles.length>30) return null;
+  const single = mode==='single';
+  const use = single ? [tiles.slice().sort((a,b)=>(b.box.x1-b.box.x0)*(b.box.y1-b.box.y0)-(a.box.x1-a.box.x0)*(a.box.y1-a.box.y0))[0]] : tiles;
+  const unsure = use.filter(t=>!t.ok);
+  if(unsure.length > use.length/2 && remoteAvailable()) return null; // mostly unsure: one whole-photo call is cheaper
+  if(unsure.length && remoteAvailable()){
+    await Promise.all(unsure.map(async t=>{
+      try{
+        const r = await recognizeRemote(await tileBlob(TileMatch.tileImage(image,t.box)),'single');
+        if(validCode(r.tile)) t.code=r.tile;
+      }catch{} // keep the local best guess; the user can correct it on the next screen
+    }));
+  }
+  if(single) return {tile:use[0].code};
+  const codes = use.map(t=>t.code);
+  return {flowers:codes.filter(c=>FLOWERS.includes(c)), groups:[], hand:codes.filter(c=>!FLOWERS.includes(c))};
+}
+async function recognize(blob, mode){
+  try{ const r = await recognizeLocal(blob, mode); if(r) return r; }
+  catch(e){ console.warn('Local recognition failed, using the cloud model', e); }
+  if(!remoteAvailable()) return mode==='single' ? {tile:null} : {flowers:[],groups:[],hand:[]};
+  return recognizeRemote(blob, mode);
+}
 async function shrink(file){
   const bmp = await createImageBitmap(file);
   const s = Math.min(1, 1600/Math.max(bmp.width,bmp.height));
@@ -279,7 +329,7 @@ async function shrink(file){
 const validCode = c => KINDS.includes(c) || FLOWERS.includes(c);
 
 /* ================= app state ================= */
-const S = { store:LocalStore(), me:{id:null,name:''}, canPhoto:false, route:{name:'home'}, unsub:[], matches:[], match:null, hands:[], flow:null };
+const S = { store:LocalStore(), me:{id:null,name:''}, canPhoto:!!window.TileMatch, route:{name:'home'}, unsub:[], matches:[], match:null, hands:[], flow:null };
 function go(route){ S.unsub.forEach(u=>u&&u()); S.unsub=[]; S.route=route; S.flow=null; mount(); window.scrollTo(0,0); }
 function toast(msg){ const t=document.createElement('div'); t.className='toast'; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),2800); }
 
