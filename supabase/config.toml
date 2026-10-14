@@ -1,0 +1,4 @@
+project_id = "j2-mahjong-scorer"
+
+[functions.recognize]
+verify_jwt = false

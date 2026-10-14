@@ -1,4 +1,4 @@
-// Cloudflare Worker: tile-recognition proxy. Keeps the Anthropic API key off the client.
+// Supabase Edge Function: tile-recognition proxy. Keeps the Anthropic API key off the client.
 // Accepts POST {image: <base64 jpeg>, mode: 'single'|'hand'} and returns the JSON the PWA expects.
 const MODEL = 'claude-sonnet-5-5';
 const ALLOWED_ORIGINS = ['https://leonasdv.github.io', 'http://localhost:5173'];
@@ -16,8 +16,7 @@ const PROMPTS = {
   hand: `${TILE_GUIDE}\n\nThe photo shows a player's winning mahjong hand on a table. Identify every tile face. Flowers go in "flowers". If some tiles are clearly laid apart as revealed sets of 3 or 4 (chow/pong/kong), put each such set in "groups"; put all other tiles in "hand" in left-to-right order. Ignore face-down tiles. Reply with JSON only: {"flowers":["..."],"groups":[["..."]],"hand":["..."]}`,
 };
 
-export default {
-  async fetch(req, env) {
+Deno.serve(async (req: Request) => {
     const origin = req.headers.get('Origin') || '';
     const cors = {
       'Access-Control-Allow-Origin': ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0],
@@ -25,14 +24,14 @@ export default {
       'Access-Control-Allow-Headers': 'Content-Type',
       'Vary': 'Origin',
     };
-    const json = (body, status = 200) =>
+    const json = (body: unknown, status = 200) =>
       new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
 
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
     if (req.method !== 'POST') return json({ error: 'POST only' }, 405);
     if (!ALLOWED_ORIGINS.includes(origin)) return json({ error: 'Origin not allowed' }, 403);
 
-    let body;
+    let body: any;
     try { body = await req.json(); } catch { return json({ error: 'Bad JSON' }, 400); }
     const { image, mode } = body;
     if (typeof image !== 'string' || !PROMPTS[mode]) return json({ error: 'Need image (base64) and mode (single|hand)' }, 400);
@@ -40,7 +39,7 @@ export default {
 
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      headers: { 'x-api-key': Deno.env.get("ANTHROPIC_API_KEY") ?? "", 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
       body: JSON.stringify({
         model: MODEL,
         max_tokens: 1024,
@@ -52,9 +51,8 @@ export default {
     });
     if (!res.ok) return json({ error: 'Upstream ' + res.status }, 502);
     const data = await res.json();
-    const text = (data.content || []).map(c => c.text || '').join('');
+    const text = (data.content || []).map((c: any) => c.text || '').join('');
     const m = text.match(/\{[\s\S]*\}/);
     if (!m) return json({ error: 'No JSON in model reply' }, 502);
     try { return json(JSON.parse(m[0])); } catch { return json({ error: 'Unparseable model reply' }, 502); }
-  },
-};
+});

@@ -47,13 +47,13 @@ The API key for recognition must stay on the server. Never call the Claude API d
 
 ## Enable photo reading on GitHub Pages
 
-Photo reading needs a small proxy so the Anthropic API key never reaches the browser. `worker/index.js` is a Cloudflare Worker that does this (free tier is enough).
+Photo reading needs a small proxy so the Anthropic API key never reaches the browser. `supabase/functions/recognize` is a Supabase Edge Function that does this.
 
 ```
-cd worker
-npx wrangler login
-npx wrangler secret put ANTHROPIC_API_KEY   # paste your key when prompted
-npx wrangler deploy                          # prints https://j2-scorer-recognize.<you>.workers.dev
+npx supabase login
+npx supabase link --project-ref <your-project-ref>
+npx supabase secrets set ANTHROPIC_API_KEY=<your key>
+npx supabase functions deploy recognize --no-verify-jwt
 ```
 
-Then set `RECOGNIZE_URL` in `public/index.html` to that URL, commit and push. Pages redeploys and the photo buttons appear. The worker only accepts requests from `https://leonasdv.github.io` and `http://localhost:5173` (edit `ALLOWED_ORIGINS` to change).
+Then set `RECOGNIZE_URL` in `public/index.html` to `https://<your-project-ref>.supabase.co/functions/v1/recognize`, commit and push. Pages redeploys and the photo buttons appear. The function only accepts requests from `https://leonasdv.github.io` and `http://localhost:5173` (edit `ALLOWED_ORIGINS` to change).
