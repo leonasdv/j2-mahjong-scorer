@@ -44,3 +44,16 @@ The API key for recognition must stay on the server. Never call the Claude API d
 5. **#28 Three concealed pongs** counts any pong formed in the hand, including one completed by the winning discard.
 6. **#24 Joker pair** applies only to the pair of a standard hand, not to seven pairs.
 7. **KV.3 trigger** is detected automatically from the revealed sets and can be overridden on the Points screen.
+
+## Enable photo reading on GitHub Pages
+
+Photo reading needs a small proxy so the Anthropic API key never reaches the browser. `worker/index.js` is a Cloudflare Worker that does this (free tier is enough).
+
+```
+cd worker
+npx wrangler login
+npx wrangler secret put ANTHROPIC_API_KEY   # paste your key when prompted
+npx wrangler deploy                          # prints https://j2-scorer-recognize.<you>.workers.dev
+```
+
+Then set `RECOGNIZE_URL` in `public/index.html` to that URL, commit and push. Pages redeploys and the photo buttons appear. The worker only accepts requests from `https://leonasdv.github.io` and `http://localhost:5173` (edit `ALLOWED_ORIGINS` to change).
