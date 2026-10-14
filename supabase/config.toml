@@ -1,4 +1,4 @@
-project_id = "j2-mahjong-scorer"
+project_id = "wow-mahjong"
 
 [functions.recognize]
 verify_jwt = false

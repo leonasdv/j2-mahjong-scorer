@@ -1,5 +1,5 @@
 // Offline shell cache. Network-first for HTML so new deploys show up; cache-first for static assets.
-const CACHE = 'j2-scorer-v1';
+const CACHE = 'wow-mahjong-v2';
 const SHELL = ['./', 'index.html', 'scoring.js', 'manifest.webmanifest', 'icon.svg'];
 self.addEventListener('install', e => e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())));
 self.addEventListener('activate', e => e.waitUntil(

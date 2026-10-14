@@ -1,4 +1,4 @@
-# J2 Mahjong Scorer (prototype)
+# WOW Mahjong (prototype)
 
 A Progressive Web App for J2 Mahjong League tables. Players photograph the winning hand, the app reads the tiles, the user fixes any misreads, and the hand is scored with the official J2 rules (Panduan Skor, Oktober 2026). Matches are shared live so all four players see every hand on their own phones.
 

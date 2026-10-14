@@ -1,6 +1,6 @@
 {
-  "name": "J2 Mahjong Scorer",
-  "short_name": "J2 Scorer",
+  "name": "WOW Mahjong",
+  "short_name": "WOW Mahjong",
   "description": "Photograph a winning mahjong hand and score it with the J2 Mahjong League rules.",
   "start_url": "./",
   "scope": "./",
