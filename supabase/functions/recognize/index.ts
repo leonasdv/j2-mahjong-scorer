@@ -1,7 +1,7 @@
 // Supabase Edge Function: tile-recognition proxy. Keeps the Gemini API key off the client.
 // Accepts POST {image: <base64 jpeg>, mode: 'single'|'hand'} and returns the JSON the PWA expects.
 // Tried in order; a busy or missing model falls through to the next.
-const MODELS = ['gemini-flash-latest', 'gemini-2.5-flash'];
+const MODELS = ['gemini-2.5-flash', 'gemini-flash-latest'];
 const ALLOWED_ORIGINS = ['https://leonasdv.github.io', 'http://localhost:5173'];
 
 const TILE_GUIDE = `Tile set guide (Indonesian J2 league set, ivory tiles, tiles may be rotated 90 degrees):
@@ -43,7 +43,7 @@ Deno.serve(async (req: Request) => {
         { inline_data: { mime_type: 'image/jpeg', data: image } },
         { text: PROMPTS[mode] },
       ] }],
-      generationConfig: { responseMimeType: 'application/json', temperature: 0 },
+      generationConfig: { responseMimeType: 'application/json', temperature: 0, thinkingConfig: { thinkingBudget: 0 } }, // no thinking: much faster
     });
     let res: Response | null = null;
     let lastErr = '';
