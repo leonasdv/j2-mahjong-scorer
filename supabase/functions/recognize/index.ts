@@ -1,6 +1,7 @@
 // Supabase Edge Function: tile-recognition proxy. Keeps the Gemini API key off the client.
 // Accepts POST {image: <base64 jpeg>, mode: 'single'|'hand'} and returns the JSON the PWA expects.
-const MODEL = 'gemini-flash-latest';
+// Tried in order; a busy or missing model falls through to the next.
+const MODELS = ['gemini-flash-latest', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
 const ALLOWED_ORIGINS = ['https://leonasdv.github.io', 'http://localhost:5173'];
 
 const TILE_GUIDE = `Tile set guide (Indonesian J2 league set, ivory tiles, tiles may be rotated 90 degrees):
@@ -37,18 +38,30 @@ Deno.serve(async (req: Request) => {
     if (typeof image !== 'string' || !PROMPTS[mode]) return json({ error: 'Need image (base64) and mode (single|hand)' }, 400);
     if (image.length > 6_000_000) return json({ error: 'Image too large' }, 413);
 
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
-      method: 'POST',
-      headers: { 'x-goog-api-key': Deno.env.get('GEMINI_API_KEY') ?? '', 'content-type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [
-          { inline_data: { mime_type: 'image/jpeg', data: image } },
-          { text: PROMPTS[mode] },
-        ] }],
-        generationConfig: { responseMimeType: 'application/json', temperature: 0 },
-      }),
+    const payload = JSON.stringify({
+      contents: [{ parts: [
+        { inline_data: { mime_type: 'image/jpeg', data: image } },
+        { text: PROMPTS[mode] },
+      ] }],
+      generationConfig: { responseMimeType: 'application/json', temperature: 0 },
     });
-    if (!res.ok) return json({ error: 'Upstream ' + res.status, detail: (await res.text()).slice(0, 300) }, 502);
+    let res: Response | null = null;
+    let lastErr = '';
+    for (const model of MODELS) {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+          method: 'POST',
+          headers: { 'x-goog-api-key': Deno.env.get('GEMINI_API_KEY') ?? '', 'content-type': 'application/json' },
+          body: payload,
+        });
+        if (r.ok) { res = r; break; }
+        lastErr = `${model} ${r.status}: ${(await r.text()).slice(0, 200)}`;
+        if (r.status !== 503 && r.status !== 429) break; // retry only when busy
+        await new Promise(ok => setTimeout(ok, 800));
+      }
+      if (res) break;
+    }
+    if (!res) return json({ error: 'Upstream failed', detail: lastErr }, 502);
     const data = await res.json();
     const text = (data.candidates?.[0]?.content?.parts ?? []).map((p: any) => p.text || '').join('');
     const m = text.match(/\{[\s\S]*\}/);
