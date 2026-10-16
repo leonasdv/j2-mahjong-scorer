@@ -207,8 +207,10 @@ function tileName(code){
   if(WINDS.includes(code)) return WIND_EN[WINDS.indexOf(code)]+' wind';
   return {RD:'Red dragon',GD:'Green dragon',WD:'White dragon'}[code] || (code.startsWith('bf')?'Black flower '+code[2]:code.startsWith('rf')?'Red flower '+code[2]:code);
 }
+// A flower joker is every flower of its set of four (black or red); any other joker is just that tile.
+const isJokerTile = (code,joker) => !!joker && (FLOWERS.includes(joker) ? code.slice(0,2)===joker.slice(0,2) && FLOWERS.includes(code) : code===joker);
 function tileHTML(code,{joker,size='',tag='span',attrs=''}={}){
-  const j = joker && code===joker;
+  const j = isJokerTile(code,joker);
   return `<${tag} class="tile ${size}${j?' joker':''}" ${tag==='button'?'type="button"':''} aria-label="${esc(tileName(code))}${j?' (joker)':''}" ${attrs}>${face(code)}</${tag}>`;
 }
 
@@ -387,7 +389,7 @@ function newView(){
     </div>
     <div class="panel stack">
       <div class="spread"><h3>Joker tile</h3>${NM.joker?tileHTML(NM.joker,{joker:NM.joker,size:'lg'}):''}</div>
-      <p class="small muted">All four copies of this tile count as jokers for the whole match.</p>
+      <p class="small muted">${NM.joker&&FLOWERS.includes(NM.joker)?`All four ${NM.joker.startsWith('bf')?'black':'red'} flowers count as jokers (and still score as flowers) for the whole match.`:'All four copies of this tile count as jokers for the whole match.'}</p>
       <div class="row">
         <button class="btn" data-act="pick-joker">Choose tile</button>
         ${S.canPhoto?`<label class="btn" style="display:inline-flex;align-items:center">Photo of tile<input type="file" accept="image/*" capture="environment" id="joker-photo" hidden></label>`:''}
@@ -518,6 +520,7 @@ function renderFlow(){
         <div class="spread"><div><div class="small muted">${esc(m.players[c.winner])} wins</div><div class="result-total">${r.total}</div></div>
           <span class="tag">${r.structure.replace(/-/g,' ')}</span></div>
         <ul class="items">${r.items.map(i=>`<li><span><span class="no">#${i.no}</span>${esc(i.name)}<br><span class="small muted">${esc(i.en)}</span></span><strong>+${i.pts}</strong></li>`).join('')}</ul>
+        ${r.flowerJokersPlaced?`<p class="small muted">${r.flowerJokersPlaced} flower joker${r.flowerJokersPlaced>1?'s':''} placed in the hand to complete it (they still score as flowers).</p>`:''}
         ${r.kv3?`<p><strong>KV.3 penalty applies:</strong> ${r.base} × 4 = ${r.total}. ${esc(m.players[c.discarder])} pays the full amount.</p>`:''}
         <label class="check small"><input type="checkbox" id="kv3" ${r.kv3?'checked':''} ${c.selfDraw?'disabled':''}> Apply KV.3 (×4) penalty</label>
       </div>
@@ -596,7 +599,7 @@ function bind(){
     if(d.open) return go({name:'match',id:d.open});
     if(d.act==='home') return go({name:'home'});
     if(d.act==='new'){NM=null;return go({name:'new'})}
-    if(d.act==='pick-joker'){saveNM();return openPicker({title:'Joker tile',current:NM.joker,onPick:c=>{if(FLOWERS.includes(c))return toast('Flowers cannot be the joker.');NM.joker=c;render()}})}
+    if(d.act==='pick-joker'){saveNM();return openPicker({title:'Joker tile',current:NM.joker,onPick:c=>{NM.joker=c;render()}})}
     if(d.act==='create') return createMatch();
     if(d.act==='score') return startFlow();
     if(d.act==='draw') return recordDraw();
@@ -631,7 +634,7 @@ async function createMatch(){
 }
 async function jokerPhoto(file){
   if(!file) return; const st=$('#joker-status'); st.textContent='Reading tile…';
-  try{ const r=await recognize(await shrink(file),'single'); if(validCode(r.tile)&&!FLOWERS.includes(r.tile)){saveNM();NM.joker=r.tile;render();toast('Joker set to '+tileName(r.tile))} else st.textContent='Could not read that tile. Choose it from the list instead.'; }
+  try{ const r=await recognize(await shrink(file),'single'); if(validCode(r.tile)){saveNM();NM.joker=r.tile;render();toast('Joker set to '+tileName(r.tile))} else st.textContent='Could not read that tile. Choose it from the list instead.'; }
   catch(e){ st.textContent=e.message||'Could not read that tile.'; }
 }
 async function handlePhoto(file){

@@ -27,3 +27,8 @@ show('small four winds',{joker:'5p',flowers:[],exposed:[],concealed:s('E E E S S
 // invalid
 show('invalid',{joker:'5p',flowers:[],exposed:[],concealed:s('1m 2m 4m 4s 5s 6s 7s 8s 9s 2p 3p 4p 8m 8m')},ctx());
 console.log(J2.settle(10,4,0,2,false,'losers-pay'), J2.settle(10,4,0,null,true,'losers-pay'));
+// flower joker: red flowers are the jokers; seated 2nd, black flower 2 still scores as an own-seat black flower
+show('flower joker, black own seat',{joker:'rf1',flowers:['bf2'],exposed:[],concealed:s('1m 2m 3m 4s 5s 6s 7s 8s 9s 2p 3p 4p 8m 8m')},ctx({seatNo:2}));
+show('flower joker rf1 + bf2 fills gap',{joker:'rf1',flowers:['bf2','rf3'],exposed:[],concealed:s('1m 2m 3m 4s 5s 6s 7s 8s 9s 2p 3p 4p 8m')},ctx({seatNo:2}));
+show('flower joker, short with no flower',{joker:'rf1',flowers:['bf2'],exposed:[],concealed:s('1m 2m 3m 4s 5s 6s 7s 8s 9s 2p 3p 4p 8m')},ctx({seatNo:2}));
+show('flower joker pads exposed pair',{joker:'bf4',flowers:['bf4'],exposed:[{tiles:s('7p 7p')}],concealed:s('1m 2m 3m 4s 5s 6s 2p 3p 4p 8m 8m')},ctx());

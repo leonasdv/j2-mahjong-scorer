@@ -6,7 +6,8 @@
  *   winds:   E S W N
  *   dragons: RD (中 red), GD (發 green), WD (白 white)
  *   flowers: bf1..bf4 (black numeral 梅蘭菊竹), rf1..rf4 (red numeral 春夏秋冬)
- * The designated joker tile: every copy of it is always a joker.
+ * The designated joker tile: every copy of it is always a joker. If it is a flower, all four flowers of its set
+ * (bf1..bf4 or rf1..rf4) are jokers and also still score as flowers.
  */
 (function (root) {
   const KINDS = [];
@@ -409,12 +410,27 @@
    * ctx  = { seatWind:0-3, roundWind:0-3, seatNo:1-4, selfDraw:bool, extras:{...}, instant4J:bool }
    */
   function score(hand, ctx) {
-    const joker = hand.joker;
+    let joker = hand.joker;
     const flowers = (hand.flowers || []).filter(isFlower);
-    const exposed = (hand.exposed || []).filter(g => g.tiles.length);
-    const concealed = hand.concealed || [];
+    let exposed = (hand.exposed || []).filter(g => g.tiles.length);
+    let concealed = hand.concealed || [];
+    let flowerJokers = 0; // flowers held that are jokers (a flower joker is every flower of its set of four)
+    let placed = 0;       // of those, how many were put into the hand to fill a gap
+    if (isFlower(joker)) {
+      // A flower joker is also still a flower: every flower held scores as one. When the hand is short of tiles
+      // (a flower stays in the flower row, so a winning hand is missing the tile it stands in for), the
+      // flower-jokers fill the gaps: first exposed groups short of three, then the concealed hand.
+      const family = joker.slice(0, 2);
+      flowerJokers = new Set(flowers.filter(f => f.startsWith(family))).size;
+      const tok = '#J';
+      exposed = exposed.map(g => ({ ...g, tiles: g.tiles.length < 3 ? [...g.tiles, ...Array(3 - g.tiles.length).fill(tok)] : g.tiles }));
+      placed = exposed.reduce((n, g, i) => n + g.tiles.filter(t => t === tok).length, 0);
+      const gap = 14 - 3 * exposed.length - concealed.length;
+      if (gap > 0 && placed + gap <= flowerJokers) { concealed = [...concealed, ...Array(gap).fill(tok)]; placed += gap; }
+      joker = tok;
+    }
     const allTiles = [...exposed.flatMap(g => g.tiles), ...concealed];
-    const J = allTiles.filter(t => t === joker).length;
+    const J = flowerJokers ? flowerJokers : allTiles.filter(t => t === joker).length;
     const withJ = J > 0;
 
     if (ctx.instant4J) {
@@ -460,6 +476,7 @@
     if (!candidates.length) return { ok: false, error: 'These tiles do not form a winning hand. Check for misread tiles.' };
     const results = candidates.map(c => finish(c, ctx));
     results.sort((a, b) => b.total - a.total);
+    if (flowerJokers) results[0].flowerJokersPlaced = placed;
     return results[0];
   }
   function fixJ(r, J) { // special structures use total jokers in the whole hand
