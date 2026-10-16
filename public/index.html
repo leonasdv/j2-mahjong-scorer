@@ -209,6 +209,8 @@ function tileName(code){
 }
 // A flower joker is every flower of its set of four (black or red); any other joker is just that tile.
 const isJokerTile = (code,joker) => !!joker && (FLOWERS.includes(joker) ? code.slice(0,2)===joker.slice(0,2) && FLOWERS.includes(code) : code===joker);
+// Flowers that sit in the Flowers row. A flower that is the match joker is a joker, so it lives in the hand or a set.
+const isRowFlower = code => FLOWERS.includes(code) && !isJokerTile(code,S.match?.joker);
 function tileHTML(code,{joker,size='',tag='span',attrs=''}={}){
   const j = isJokerTile(code,joker);
   return `<${tag} class="tile ${size}${j?' joker':''}" ${tag==='button'?'type="button"':''} aria-label="${esc(tileName(code))}${j?' (joker)':''}" ${attrs}>${face(code)}</${tag}>`;
@@ -450,9 +452,9 @@ const T = c => ({id:nid(),code:c});
 function draftFromRecognition(r){
   const fl=[],ex=[],hd=[];
   const clean=a=>(Array.isArray(a)?a:[]).map(String).filter(validCode);
-  clean(r.flowers).forEach(c=>fl.push(T(c)));
+  clean(r.flowers).forEach(c=>(isRowFlower(c)?fl:hd).push(T(c)));
   (Array.isArray(r.groups)?r.groups:[]).forEach(g=>{const t=clean(g); if(t.length) ex.push({id:nid(),concealedKong:false,tiles:t.map(T)})});
-  clean(r.hand).forEach(c=>(FLOWERS.includes(c)?fl:hd).push(T(c)));
+  clean(r.hand).forEach(c=>(isRowFlower(c)?fl:hd).push(T(c)));
   return {flowers:fl,exposed:ex,concealed:hd};
 }
 function stepsBar(i){return `<div class="steps" aria-hidden="true">${[0,1,2,3].map(k=>`<span class="${k<=i?'on':''}"></span>`).join('')}</div>`}
@@ -504,6 +506,7 @@ function renderFlow(){
       <div class="panel stack"><h3>Winning tile came from</h3><div class="chips">
         <button class="chip" aria-pressed="${c.selfDraw}" data-from="self">Self-draw</button>
         ${m.players.map((p,i)=>i===c.winner?'':`<button class="chip" aria-pressed="${!c.selfDraw&&c.discarder===i}" data-from="${i}">${esc(p)}'s discard</button>`).join('')}</div></div>
+      ${winTilePanel()}
       ${openedPanel()}
       <div class="panel"><h3>Special situations</h3>
         ${opt('replacement','Replacement tile from the wall tail (#20)')}${opt('robKong','Robbed a kong (#21)')}${opt('lastTile','Last tile of the wall (#22)')}
@@ -511,7 +514,7 @@ function renderFlow(){
         ${opt('instant4J','Declared the 4-joker instant win (#9)')}
       </div>
       ${f.error?`<p class="err">${esc(f.error)}</p>`:''}
-      <button class="btn primary block" data-flow="calc" ${c.winner==null||(!c.selfDraw&&c.discarder==null)?'disabled':''}>Calculate points</button>
+      <button class="btn primary block" data-flow="calc" ${c.winner==null||(!c.selfDraw&&c.discarder==null)||(needsWinTile()&&!c.winTile)?'disabled':''}>Calculate points</button>
       </div>`;
   }
   if(f.step==='result'){
@@ -538,9 +541,9 @@ function readDraftFromDom(){
   f.draft.flowers=zone('flowers'); f.draft.concealed=zone('concealed');
   f.draft.exposed.forEach(g=>g.tiles=zone(g.id));
   // flowers always belong in the flower row
-  const misplaced=f.draft.flowers.filter(t=>!FLOWERS.includes(t.code));
-  if(misplaced.length){f.draft.flowers=f.draft.flowers.filter(t=>FLOWERS.includes(t.code));f.draft.concealed.push(...misplaced)}
-  const strays=[...f.draft.concealed,...f.draft.exposed.flatMap(g=>g.tiles)].filter(t=>FLOWERS.includes(t.code));
+  const misplaced=f.draft.flowers.filter(t=>!isRowFlower(t.code));
+  if(misplaced.length){f.draft.flowers=f.draft.flowers.filter(t=>isRowFlower(t.code));f.draft.concealed.push(...misplaced)}
+  const strays=[...f.draft.concealed,...f.draft.exposed.flatMap(g=>g.tiles)].filter(t=>isRowFlower(t.code));
   if(strays.length){
     f.draft.concealed=f.draft.concealed.filter(t=>!strays.includes(t));
     f.draft.exposed.forEach(g=>g.tiles=g.tiles.filter(t=>!strays.includes(t)));
@@ -565,6 +568,15 @@ function handSets(){
   return r.ok?r.melds.filter(x=>x.type!=='pair'&&x.concealed&&!x.visible):[];
 }
 const setKey=x=>x.type+':'+x.k;
+// A pong completed by an opponent's discard is not concealed (#28, #38), so for a discard win the scorer needs the
+// winning tile whenever the hand holds a pong.
+const needsWinTile=()=>!S.flow.ctx.selfDraw&&handSets().some(x=>x.type==='pong');
+function winTilePanel(){
+  const c=S.flow.ctx; if(!needsWinTile()) return '';
+  return `<div class="panel stack"><h3>Winning tile</h3>
+    <p class="small muted">The discard that completed the hand. A set it completes is not counted as concealed.</p>
+    <div class="row">${c.winTile?tileHTML(c.winTile,{joker:S.match.joker}):''}<button class="btn" data-flow="pickwin">${c.winTile?'Change':'Choose tile'}</button></div></div>`;
+}
 function openedPanel(){
   const sets=handSets(); if(!sets.length) return '';
   const on={}, seen={}; (S.flow.ctx.opened||[]).forEach(o=>on[setKey(o)]=(on[setKey(o)]||0)+1);
@@ -578,7 +590,7 @@ function handFromDraft(d){return {joker:S.match.joker,flowers:d.flowers.map(t=>t
 function computeResult(){
   const f=S.flow,m=S.match,c=f.ctx;
   const w=seatWind(m,c.winner);
-  const res=J2.score(handFromDraft(f.draft),{seatWind:w,roundWind:m.roundWind||0,seatNo:w+1,selfDraw:c.selfDraw,extras:c.extras,opened:c.opened||[],instant4J:c.extras.instant4J,kv3Override:c.kv3Override});
+  const res=J2.score(handFromDraft(f.draft),{seatWind:w,roundWind:m.roundWind||0,seatNo:w+1,selfDraw:c.selfDraw,extras:c.extras,opened:c.opened||[],winTile:c.selfDraw?null:c.winTile,instant4J:c.extras.instant4J,kv3Override:c.kv3Override});
   if(!res.ok){f.error=res.error;return false}
   f.result=res; f.deltas=J2.settle(res.total,m.players.length,c.winner,c.discarder,c.selfDraw,m.rule);
   return true;
@@ -669,7 +681,7 @@ function addTile(zone){
   const f=S.flow;
   openPicker({title:'Add a tile',onPick:c=>{
     const t=T(c);
-    if(FLOWERS.includes(c)||zone==='flowers') { if(!FLOWERS.includes(c)) return toast('Only flowers go in the flower row.'); f.draft.flowers.push(t); }
+    if(isRowFlower(c)||zone==='flowers') { if(!isRowFlower(c)) return toast(FLOWERS.includes(c)?'The joker flower goes in the hand, not the flower row.':'Only flowers go in the flower row.'); f.draft.flowers.push(t); }
     else if(zone==='concealed') f.draft.concealed.push(t);
     else f.draft.exposed.find(g=>g.id===zone).tiles.push(t);
     renderFlow();
@@ -681,13 +693,13 @@ function editTile(tid){
   const [zone,arr]=lists.find(([,a])=>a.some(t=>t.id===tid)); const tile=arr.find(t=>t.id===tid);
   const moveTo=(target)=>()=>{arr.splice(arr.indexOf(tile),1);target.push(tile);d.exposed=d.exposed.filter(g=>g.tiles.length);renderFlow()};
   const moves=[];
-  if(zone!=='concealed'&&!FLOWERS.includes(tile.code)) moves.push({label:'hand',fn:moveTo(d.concealed)});
-  if(!FLOWERS.includes(tile.code)){
+  if(zone!=='concealed'&&!isRowFlower(tile.code)) moves.push({label:'hand',fn:moveTo(d.concealed)});
+  if(!isRowFlower(tile.code)){
     d.exposed.forEach((g,i)=>{if(g.id!==zone)moves.push({label:'set '+(i+1),fn:moveTo(g.tiles)})});
     moves.push({label:'a new set',fn:()=>{const g={id:nid(),concealedKong:false,tiles:[]};d.exposed.push(g);moveTo(g.tiles)()}});
   }
   openPicker({title:'Replace tile',current:tile.code,moves,
-    onPick:c=>{ if(FLOWERS.includes(c)&&zone!=='flowers'){arr.splice(arr.indexOf(tile),1);d.flowers.push(T(c))} else tile.code=c; d.exposed=d.exposed.filter(g=>g.tiles.length); renderFlow(); },
+    onPick:c=>{ if(isRowFlower(c)&&zone!=='flowers'){arr.splice(arr.indexOf(tile),1);d.flowers.push(T(c))} else if(!isRowFlower(c)&&zone==='flowers'){arr.splice(arr.indexOf(tile),1);d.concealed.push(T(c))} else tile.code=c; d.exposed=d.exposed.filter(g=>g.tiles.length); renderFlow(); },
     onRemove:()=>{arr.splice(arr.indexOf(tile),1);d.exposed=d.exposed.filter(g=>g.tiles.length);renderFlow()}});
 }
 async function flowAction(a){
@@ -697,10 +709,11 @@ async function flowAction(a){
   if(a==='photo'){f.step='photo';return renderFlow()}
   if(a==='tiles'){f.step='tiles';f.error='';return renderFlow()}
   if(a==='confirm'){f.step='confirm';f.error='';return renderFlow()}
+  if(a==='pickwin'){return openPicker({title:'Winning tile',current:f.ctx.winTile,onPick:c=>{f.ctx.winTile=c;renderFlow()}})}
   if(a==='newset'){f.draft.exposed.push({id:nid(),concealedKong:false,tiles:[],keep:true});return renderFlow()}
   if(a==='toconfirm'){
     f.ctx=f.ctx||{winner:null,selfDraw:false,discarder:null,extras:{},kv3Override:null};
-    f.ctx.opened=[]; // tiles may have changed since the last visit
+    f.ctx.opened=[]; f.ctx.winTile=null; // tiles may have changed since the last visit
     f.step='confirm';f.error='';return renderFlow();
   }
   if(a==='calc'){ f.ctx.kv3Override=null; if(computeResult()){f.error='';f.step='result'} return renderFlow(); }

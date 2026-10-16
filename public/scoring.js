@@ -407,31 +407,37 @@
   // ---------- main ----------
   /**
    * hand = { joker:'5p', flowers:[...], exposed:[{tiles:[...], concealedKong:bool}], concealed:[...] }
-   * ctx  = { seatWind:0-3, roundWind:0-3, seatNo:1-4, selfDraw:bool, extras:{...}, instant4J:bool,
+   * ctx  = { seatWind:0-3, roundWind:0-3, seatNo:1-4, selfDraw:bool, extras:{...}, instant4J:bool, winTile:'5p' (the discard that won; completing a pong makes it not concealed),
    *          opened:[{type:'pong'|'chow', k}] sets in the concealed tiles that were already revealed }
    */
   function score(hand, ctx) {
     let joker = hand.joker;
-    const flowers = (hand.flowers || []).filter(isFlower);
+    let flowers = (hand.flowers || []).filter(isFlower);
     let exposed = (hand.exposed || []).filter(g => g.tiles.length);
     let concealed = hand.concealed || [];
-    let flowerJokers = 0; // flowers held that are jokers (a flower joker is every flower of its set of four)
-    let placed = 0;       // of those, how many were put into the hand to fill a gap
+    let placed = 0; // flower-jokers moved from the flower row into the hand to fill a gap
     if (isFlower(joker)) {
-      // A flower joker is also still a flower: every flower held scores as one. When the hand is short of tiles
-      // (a flower stays in the flower row, so a winning hand is missing the tile it stands in for), the
-      // flower-jokers fill the gaps: first exposed groups short of three, then the concealed hand.
-      const family = joker.slice(0, 2);
-      flowerJokers = new Set(flowers.filter(f => f.startsWith(family))).size;
-      const tok = '#J';
-      exposed = exposed.map(g => ({ ...g, tiles: g.tiles.length < 3 ? [...g.tiles, ...Array(3 - g.tiles.length).fill(tok)] : g.tiles }));
-      placed = exposed.reduce((n, g, i) => n + g.tiles.filter(t => t === tok).length, 0);
-      const gap = 14 - 3 * exposed.length - concealed.length;
-      if (gap > 0 && placed + gap <= flowerJokers) { concealed = [...concealed, ...Array(gap).fill(tok)]; placed += gap; }
+      // A flower joker is every flower of its set of four. One sitting in the hand or a set is a joker there and
+      // also still scores as a flower. One left in the flower row is only a flower, unless the hand is short of
+      // tiles, in which case it is placed to fill the gap: exposed groups short of three first, then the hand.
+      const family = joker.slice(0, 2), tok = '#J', isFam = t => isFlower(t) && t.startsWith(family);
+      const inHand = [...exposed.flatMap(g => g.tiles), ...concealed].filter(isFam);
+      const asTok = t => (isFam(t) ? tok : t);
+      exposed = exposed.map(g => ({ ...g, tiles: g.tiles.map(asTok) }));
+      concealed = concealed.map(asTok);
+      flowers = [...flowers, ...inHand];
+      let avail = new Set(hand.flowers.filter(isFam)).size;
+      const pad = exposed.reduce((n, g) => n + Math.max(0, 3 - g.tiles.length), 0);
+      if (pad <= avail) {
+        exposed = exposed.map(g => ({ ...g, tiles: g.tiles.length < 3 ? [...g.tiles, ...Array(3 - g.tiles.length).fill(tok)] : g.tiles }));
+        placed = pad; avail -= pad;
+        const gap = 14 - 3 * exposed.length - concealed.length;
+        if (gap > 0 && gap <= avail) { concealed = [...concealed, ...Array(gap).fill(tok)]; placed += gap; }
+      }
       joker = tok;
     }
     const allTiles = [...exposed.flatMap(g => g.tiles), ...concealed];
-    const J = flowerJokers ? flowerJokers : allTiles.filter(t => t === joker).length;
+    const J = allTiles.filter(t => t === joker).length;
     const withJ = J > 0;
 
     if (ctx.instant4J) {
@@ -474,16 +480,28 @@
     }
     const decs = decompose(counts.slice(), cj, 4 - exposed.length, 1);
     const hOpen = { ...h, exposedCount: h.exposedCount + opened.length };
+    const win = !ctx.selfDraw && ctx.winTile ? IDX[ctx.winTile] : undefined;
     for (const c of combos) for (const d of decs) {
       const melds = markOpened([...c, ...d], opened);
-      if (melds) candidates.push(scoreStandard(melds, hOpen, ctx));
+      if (!melds) continue;
+      if (win === undefined) { candidates.push(scoreStandard(melds, hOpen, ctx)); continue; }
+      // The winning discard completed one set (or the pair). A pong it completed is not concealed (#28, #38);
+      // the tile could have completed any set that contains it, so every placement is tried.
+      let any = false;
+      melds.forEach((m, i) => {
+        if (m.visible || !meldTiles(m).includes(win)) return;
+        any = true;
+        const v = melds.slice(); if (isTriplet(m)) v[i] = { ...m, concealed: false };
+        candidates.push(scoreStandard(v, hOpen, ctx));
+      });
+      if (!any) candidates.push(scoreStandard(melds, hOpen, ctx)); // winning tile stood in as a joker
     }
 
     if (!candidates.length && opened.length) return { ok: false, error: 'The sets marked as opened are not in this hand. Untick them or check the tiles.' };
     if (!candidates.length) return { ok: false, error: 'These tiles do not form a winning hand. Check for misread tiles.' };
     const results = candidates.map(c => finish(c, ctx));
     results.sort((a, b) => b.total - a.total);
-    if (flowerJokers) results[0].flowerJokersPlaced = placed;
+    if (placed) results[0].flowerJokersPlaced = placed;
     return results[0];
   }
   // Mark the player's opened sets as revealed in an arrangement; null if the arrangement has no such set.

@@ -42,3 +42,20 @@ show('flower joker pads exposed pair',{joker:'bf4',flowers:['bf4'],exposed:[{til
   if(bad.ok) throw new Error('an opened set that is not in the hand should be rejected');
   console.log('\n## opened sets: ok');
 }
+// flower joker placed in the hand: a joker there AND a flower for points
+{
+  const r=J2.score({joker:'rf1',flowers:['bf2'],exposed:[],concealed:s('rf1 2m 3m 4s 5s 6s 7s 8s 9s 2p 3p 4p 8m 8m')},ctx({seatNo:2}));
+  const nos=r.ok&&r.items.map(i=>i.no);
+  if(!r.ok||!nos.includes(8)||!nos.includes(1)||!nos.includes(2)) throw new Error('flower joker in hand: expected #8 joker, #1 black own seat, #2 red flower. got '+(r.ok?nos:r.error));
+  console.log('\n## flower joker in hand: ok');
+}
+// a pong completed by the winning discard is not concealed (#28, #38); the same hand by self-draw is
+{
+  const hand={joker:'9p',flowers:[],exposed:[],concealed:s('2m 2m 2m 5s 5s 5s 7p 7p 7p 3s 3s 3s 8m 8m')};
+  const by=(o)=>J2.score(hand,ctx(o)).items.map(i=>i.no);
+  const dis=by({selfDraw:false,winTile:'2m'}), self=by({selfDraw:true,winTile:'2m'}), none=by({selfDraw:false});
+  if(!(self.includes(38)&&!dis.includes(38)&&dis.includes(28)&&none.includes(38))) throw new Error('discard-completed pong should not be concealed: '+JSON.stringify({dis,self,none}));
+  const pair=by({selfDraw:false,winTile:'8m'}); // completed the pair instead: all four pongs stay concealed
+  if(!pair.includes(38)) throw new Error('winning on the pair keeps #38');
+  console.log('\n## discard-completed pong: ok');
+}

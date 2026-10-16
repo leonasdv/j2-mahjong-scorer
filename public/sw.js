@@ -1,5 +1,5 @@
 // Offline shell cache. Network-first for HTML so new deploys show up; cache-first for static assets.
-const CACHE = 'wow-mahjong-v9';
+const CACHE = 'wow-mahjong-v10';
 const SHELL = ['./', 'index.html', 'scoring.js', 'tilematch.js', 'refs.json', 'manifest.webmanifest', 'icon.svg'];
 self.addEventListener('install', e => e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting())));
 self.addEventListener('activate', e => e.waitUntil(
