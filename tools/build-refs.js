@@ -33,7 +33,7 @@ if (singleFiles.length) {
     const b = boxes.slice().sort((p, q) => q.w * q.h - p.w * p.h)[0];
     if (!b) throw new Error(file + ': no tile found');
     const up = TM.tileImage(image, b);
-    refs.push({ code: SINGLES[i], f: TM.packFeatures(TM.features(up)) });
+    for (const ins of TM.INSETS) refs.push({ code: SINGLES[i], f: TM.packFeatures(TM.features(up, ins)) });
     sheet.push({ code: SINGLES[i], up });
   });
   console.log(singleFiles.length, 'close-ups');
@@ -47,7 +47,7 @@ for (const ph of PHOTOS) {
   if (boxes.length < need) throw new Error(`${file}: found ${boxes.length} tiles, expected ${need}`);
   ph.codes.forEach((code, i) => {
     const up = TM.rotate(TM.tileImage(image, boxes[i]), ph.turns);
-    refs.push({ code, f: TM.packFeatures(TM.features(up)) });
+    for (const ins of TM.INSETS) refs.push({ code, f: TM.packFeatures(TM.features(up, ins)) });
     sheet.push({ code, up });
   });
   console.log(file, '->', need, 'tiles');

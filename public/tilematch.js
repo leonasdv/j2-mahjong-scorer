@@ -7,6 +7,7 @@
   const NCH = 3, FLEN = FW * FH * NCH; // channels: black, red, green
   const DETECT_MAX = 800;            // photos are analysed at this max dimension
   const TILE_ASPECT = 0.74;          // tile width / height
+  const INSETS = [0.07, 0.03, 0.11]; // reference crops are stored at each inset; the first is the one used for queries
   const CANON_W = 30, CANON_H = 40;  // every tile is reduced to this size before its ink is classified
 
   /* ---------- pixel helpers ---------- */
@@ -296,7 +297,9 @@
     for (let i = 0; i < W * H; i++) {
       const r = px[i * 4] / lvl[0], g = px[i * 4 + 1] / lvl[1], b = px[i * 4 + 2] / lvl[2];
       const mx = Math.max(r, g, b), lum = (r + g + b) / 3;
-      if (g - Math.max(r, b) > 0.06 && lum < 0.8) maps[2][i] = 1;
+      // Dark green and light green are the same printed ink under different lighting; it also counts as
+      // dark ink so both lightings land in the same channel.
+      if (g - Math.max(r, b) > 0.06 && lum < 0.8) { maps[2][i] = 1; maps[0][i] = 1; }
       else if (r - Math.max(g, b) > 0.25 && r > 0.4) maps[1][i] = 1;
       else if (mx < 0.62 && lum < 0.55) maps[0][i] = 1;
     }
@@ -310,12 +313,12 @@
     return n / (W * H);
   }
   // Ink maps (black, red, green) on a FWxFH grid, from an upright tile crop.
-  function features(up) {
+  function features(up, inset) {
     // Every tile is first reduced to the same small size. A close-up reference has glints and hollow
     // centres (bamboo stalks) that a tile 70px wide in a group photo cannot show; low-passing both to one
     // resolution makes them look alike before ink is classified.
     const W = CANON_W, H = CANON_H;
-    const inset = 0.07;
+    if (inset == null) inset = 0.07;
     const ix = Math.round(up.width * inset), iy = Math.round(up.height * inset);
     const body = crop(up, ix, iy, up.width - ix, up.height - iy);
     const px = resizeBox(body, W, H).data;
@@ -422,6 +425,6 @@
     };
   }
 
-  const api = { FW, FH, weightsFrom, fillHoles, estimateTilt, findTiles, features, similarity, classify, recognizeTiles, tileImage, rotate, crop, resizeBox, loadRefs, packFeatures, unpackFeatures, ACCEPT };
+  const api = { FW, FH, INSETS, weightsFrom, fillHoles, estimateTilt, findTiles, features, similarity, classify, recognizeTiles, tileImage, rotate, crop, resizeBox, loadRefs, packFeatures, unpackFeatures, ACCEPT };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.TileMatch = api;
 })(typeof window !== 'undefined' ? window : globalThis);
