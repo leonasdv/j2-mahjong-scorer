@@ -24,4 +24,11 @@ const cross = TM.recognizeTiles(load('10.06.29 (1)'), [...zoom, ...suits], TM.we
 const right = cross.filter((t, i) => t.code === HONORS[i]).length;
 assert(right >= 14, `cross-photo: ${right}/15`);                       // 14 of 15: red dragon only exists in one photo
 assert(cross.filter(t => t.ok && t.code !== HONORS[cross.indexOf(t)]).length === 0, 'no confident misreads');
+// stacked rows in one photo (3 + 6 + 6 tiles, rows touching), also after the JPEG re-encode the app does
+for (const buf of [fs.readFileSync(path.join(__dirname, 'fixtures', 'stacked-rows.jpeg')), null]) {
+  const raw = jpeg.decode(buf || fs.readFileSync(path.join(__dirname, 'fixtures', 'stacked-rows.jpeg')), { useTArray: true });
+  const img = buf ? raw : jpeg.decode(jpeg.encode(raw, 85).data, { useTArray: true });
+  const codes = TM.recognizeTiles(img, refs, W).tiles.map(t => t.code);
+  assert.deepStrictEqual(codes, ['4s', '4s', 'rf4', 'N', 'N', 'N', 'W', 'W', 'W', '1m', '1m', '1m', '5s', '5s', '5s'], 'stacked rows' + (buf ? '' : ' (re-encoded)'));
+}
 console.log('tilematch tests passed');

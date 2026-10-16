@@ -206,7 +206,14 @@
     };
     const cx = bw >= minSide * 2 ? seam(colP, bw) : null, cy = bh >= minSide * 2 ? seam(rowP, bh) : null;
     const pick = cx && cy ? (cx.depth >= cy.depth ? ['x', cx] : ['y', cy]) : cx ? ['x', cx] : cy ? ['y', cy] : null;
-    if (!pick) { out.push(box); return; }
+    if (!pick) {
+      // A cut that missed the seam by a few pixels leaves a thin sliver of the neighbouring row along one
+      // edge, which would widen the box over bare table. Trim edges that are barely filled.
+      const trim = (prof, min) => { let a = 0, z = prof.length; const lim = Math.max(...prof) * 0.3; while (a < z - min && prof[a] < lim) a++; while (z > a + min && prof[z - 1] < lim) z--; return [a, z]; };
+      const [cx0, cx1] = trim(colP, 1), [cy0, cy1] = trim(rowP, 1);
+      out.push({ x0: box.x0 + cx0, x1: box.x0 + cx1, y0: box.y0 + cy0, y1: box.y0 + cy1 });
+      return;
+    }
     const [axis, c] = pick;
     const parts = axis === 'x'
       ? [{ ...box, x1: box.x0 + c.mid }, { ...box, x0: box.x0 + c.mid }]
@@ -354,9 +361,9 @@
   // Weighted soft IoU over all ink maps. W emphasises the cells where tiles in the set differ from each
   // other (the numeral on a 萬 tile, not the 萬 itself), see weightsFrom(). The query is tried at small
   // offsets to absorb crop misalignment.
-  function similarity(q, r, W) {
+  function similarity(q, r, W, still) {
     let best = 0;
-    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    for (let dy = still ? 0 : -1; dy <= (still ? 0 : 1); dy++) for (let dx = still ? 0 : -1; dx <= (still ? 0 : 1); dx++) {
       let mn = 0, mx = 0;
       for (let c = 0; c < NCH; c++) {
         const o = c * FW * FH;
@@ -388,13 +395,17 @@
 
   /* ---------- matching ---------- */
   const ACCEPT = { score: 0.5, margin: 0.05 };
+  const SHORTLIST = 24;              // references that get the full offset search
   function classify(tile, refs, W) {
     const portrait = (tile.width <= tile.height * 1.08);
     const turns = portrait ? [0, 2] : [1, 3];
     let best = null; const perCode = new Map();
     for (const k of turns) {
+      if (k === turns[1] && best && best.score >= 0.5) break; // already read upright; skip the upside-down try
       const q = features(rotate(tile, k)), penalty = k === 2 ? 0.02 : 0; // upright is the likelier reading
-      for (const r of refs) {
+      // Cheap pass at one offset over every reference, then the full offset search on the closest few.
+      const quick = refs.map(r => ({ r, s: similarity(q, r.f, W, true) })).sort((a, b) => b.s - a.s).slice(0, SHORTLIST);
+      for (const { r } of quick) {
         const s = similarity(q, r.f, W) - penalty;
         if (s > (perCode.get(r.code) ?? -1)) perCode.set(r.code, s);
         if (!best || s > best.score) best = { code: r.code, score: s, turns: k };

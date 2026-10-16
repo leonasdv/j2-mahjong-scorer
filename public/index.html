@@ -299,7 +299,7 @@ async function recognizeLocal(blob, mode){
   if(!tiles.length || tiles.length>30) return null;
   const single = mode==='single';
   const use = single ? [tiles.slice().sort((a,b)=>(b.box.x1-b.box.x0)*(b.box.y1-b.box.y0)-(a.box.x1-a.box.x0)*(a.box.y1-a.box.y0))[0]] : tiles;
-  const unsure = use.filter(t=>!t.ok);
+  const unsure = use.filter(t=>t.score<TileMatch.ACCEPT.score); // a low-margin guess is kept (the user corrects it next); only a tile with no decent match waits for the cloud
   if(unsure.length > use.length/2 && remoteAvailable()) return null; // mostly unsure: one whole-photo call is cheaper
   if(unsure.length && remoteAvailable()){
     await Promise.all(unsure.map(async t=>{
