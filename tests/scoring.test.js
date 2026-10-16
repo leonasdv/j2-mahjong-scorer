@@ -32,3 +32,13 @@ show('flower joker, black own seat',{joker:'rf1',flowers:['bf2'],exposed:[],conc
 show('flower joker rf1 + bf2 fills gap',{joker:'rf1',flowers:['bf2','rf3'],exposed:[],concealed:s('1m 2m 3m 4s 5s 6s 7s 8s 9s 2p 3p 4p 8m')},ctx({seatNo:2}));
 show('flower joker, short with no flower',{joker:'rf1',flowers:['bf2'],exposed:[],concealed:s('1m 2m 3m 4s 5s 6s 7s 8s 9s 2p 3p 4p 8m')},ctx({seatNo:2}));
 show('flower joker pads exposed pair',{joker:'bf4',flowers:['bf4'],exposed:[{tiles:s('7p 7p')}],concealed:s('1m 2m 3m 4s 5s 6s 2p 3p 4p 8m 8m')},ctx());
+// opened sets inside the hand: marking one ends the fully-concealed rules (#19, #38)
+{
+  const hand={joker:'9p',flowers:[],exposed:[],concealed:s('2m 2m 2m 5s 5s 5s 7p 7p 7p 3s 3s 3s 8m 8m')};
+  const full=J2.score(hand,ctx({selfDraw:true})), open=J2.score(hand,ctx({selfDraw:true,opened:[{type:'pong',k:J2.IDX['2m']}]}));
+  const has=(r,n)=>r.items.some(i=>i.no===n);
+  if(!(has(full,38)&&has(full,19)&&!has(open,38)&&!has(open,19)&&has(open,28))) throw new Error('opened set should end #19/#38');
+  const bad=J2.score(hand,ctx({opened:[{type:'chow',k:0}]}));
+  if(bad.ok) throw new Error('an opened set that is not in the hand should be rejected');
+  console.log('\n## opened sets: ok');
+}

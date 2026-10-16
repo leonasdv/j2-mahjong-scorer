@@ -504,6 +504,7 @@ function renderFlow(){
       <div class="panel stack"><h3>Winning tile came from</h3><div class="chips">
         <button class="chip" aria-pressed="${c.selfDraw}" data-from="self">Self-draw</button>
         ${m.players.map((p,i)=>i===c.winner?'':`<button class="chip" aria-pressed="${!c.selfDraw&&c.discarder===i}" data-from="${i}">${esc(p)}'s discard</button>`).join('')}</div></div>
+      ${openedPanel()}
       <div class="panel"><h3>Special situations</h3>
         ${opt('replacement','Replacement tile from the wall tail (#20)')}${opt('robKong','Robbed a kong (#21)')}${opt('lastTile','Last tile of the wall (#22)')}
         ${opt('pauChin','Declared Pau-Chin (#47)')}${opt('heavenly','Heavenly hand (#45)')}${opt('earthly','Earthly hand (#46)')}
@@ -557,11 +558,27 @@ function bindSortables(){
       onEnd(){ readDraftFromDom(); renderFlow(); }}));
   });
 }
+// Sets the scorer found inside the hand (not already in Revealed sets): the player can mark which were opened
+// before the win, since a photo cannot show it. Opened sets end the "fully concealed" rules (#17, #19, #38).
+function handSets(){
+  const r=J2.score(handFromDraft(S.flow.draft),{seatWind:0,roundWind:0,seatNo:1,selfDraw:false,extras:{}});
+  return r.ok?r.melds.filter(x=>x.type!=='pair'&&x.concealed&&!x.visible):[];
+}
+const setKey=x=>x.type+':'+x.k;
+function openedPanel(){
+  const sets=handSets(); if(!sets.length) return '';
+  const on={}, seen={}; (S.flow.ctx.opened||[]).forEach(o=>on[setKey(o)]=(on[setKey(o)]||0)+1);
+  return `<div class="panel"><h3>Opened sets</h3>
+    <p class="small muted">Tick any set in the hand that was already opened (melded) before the win. A hand with an opened set is not fully concealed.</p>
+    ${sets.map(x=>{const n=seen[setKey(x)]=(seen[setKey(x)]||0)+1;const tiles=x.type==='chow'?[x.k,x.k+1,x.k+2]:Array(3).fill(x.k);
+      return `<label class="check"><input type="checkbox" data-open="${setKey(x)}" data-n="${n}" ${on[setKey(x)]>=n?'checked':''}> <span class="row">${tiles.map(k=>tileHTML(KINDS[k],{size:'sm',joker:S.match.joker})).join('')}</span></label>`}).join('')}
+  </div>`;
+}
 function handFromDraft(d){return {joker:S.match.joker,flowers:d.flowers.map(t=>t.code),exposed:d.exposed.map(g=>({tiles:g.tiles.map(t=>t.code),concealedKong:g.concealedKong})),concealed:d.concealed.map(t=>t.code)}}
 function computeResult(){
   const f=S.flow,m=S.match,c=f.ctx;
   const w=seatWind(m,c.winner);
-  const res=J2.score(handFromDraft(f.draft),{seatWind:w,roundWind:m.roundWind||0,seatNo:w+1,selfDraw:c.selfDraw,extras:c.extras,instant4J:c.extras.instant4J,kv3Override:c.kv3Override});
+  const res=J2.score(handFromDraft(f.draft),{seatWind:w,roundWind:m.roundWind||0,seatNo:w+1,selfDraw:c.selfDraw,extras:c.extras,opened:c.opened||[],instant4J:c.extras.instant4J,kv3Override:c.kv3Override});
   if(!res.ok){f.error=res.error;return false}
   f.result=res; f.deltas=J2.settle(res.total,m.players.length,c.winner,c.discarder,c.selfDraw,m.rule);
   return true;
@@ -614,6 +631,7 @@ function bind(){
     if(t.id==='hand-photo'||t.id==='hand-upload') return handlePhoto(t.files[0]);
     if(t.id==='joker-photo') return jokerPhoto(t.files[0]);
     if(t.dataset.ck){const g=S.flow.draft.exposed.find(g=>g.id===t.dataset.ck);g.concealedKong=t.checked;return}
+    if(t.dataset.open){const [type,k]=t.dataset.open.split(':'),o=S.flow.ctx.opened=S.flow.ctx.opened||[];const i=o.findIndex(x=>x.type===type&&x.k===+k);if(t.checked&&i<0)o.push({type,k:+k});if(!t.checked&&i>=0)o.splice(i,1);return}
     if(t.dataset.x){S.flow.ctx.extras[t.dataset.x]=t.checked;return}
     if(t.id==='kv3'){S.flow.ctx.kv3Override=t.checked;computeResult();return renderFlow()}
     if(t.name==='rule'){NM.rule=t.value}
@@ -682,6 +700,7 @@ async function flowAction(a){
   if(a==='newset'){f.draft.exposed.push({id:nid(),concealedKong:false,tiles:[],keep:true});return renderFlow()}
   if(a==='toconfirm'){
     f.ctx=f.ctx||{winner:null,selfDraw:false,discarder:null,extras:{},kv3Override:null};
+    f.ctx.opened=[]; // tiles may have changed since the last visit
     f.step='confirm';f.error='';return renderFlow();
   }
   if(a==='calc'){ f.ctx.kv3Override=null; if(computeResult()){f.error='';f.step='result'} return renderFlow(); }

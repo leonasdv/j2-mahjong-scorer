@@ -407,7 +407,8 @@
   // ---------- main ----------
   /**
    * hand = { joker:'5p', flowers:[...], exposed:[{tiles:[...], concealedKong:bool}], concealed:[...] }
-   * ctx  = { seatWind:0-3, roundWind:0-3, seatNo:1-4, selfDraw:bool, extras:{...}, instant4J:bool }
+   * ctx  = { seatWind:0-3, roundWind:0-3, seatNo:1-4, selfDraw:bool, extras:{...}, instant4J:bool,
+   *          opened:[{type:'pong'|'chow', k}] sets in the concealed tiles that were already revealed }
    */
   function score(hand, ctx) {
     let joker = hand.joker;
@@ -456,7 +457,8 @@
     const h = { J, flowers, counts, concealedCounts: counts.slice(), exposedCount: exposed.length };
     const candidates = [];
 
-    if (exposed.length === 0) {
+    const opened = ctx.opened || []; // sets inside the hand that were already opened (revealed) before the win
+    if (exposed.length === 0 && !opened.length) {
       const sp = scoreSevenPairs({ ...h, J: cj }, ctx);
       if (sp) candidates.push(fixJ(sp, J));
       const to = scoreOrphans({ ...h, J: cj }, ctx);
@@ -471,13 +473,29 @@
       combos = next;
     }
     const decs = decompose(counts.slice(), cj, 4 - exposed.length, 1);
-    for (const c of combos) for (const d of decs) candidates.push(scoreStandard([...c, ...d], h, ctx));
+    const hOpen = { ...h, exposedCount: h.exposedCount + opened.length };
+    for (const c of combos) for (const d of decs) {
+      const melds = markOpened([...c, ...d], opened);
+      if (melds) candidates.push(scoreStandard(melds, hOpen, ctx));
+    }
 
+    if (!candidates.length && opened.length) return { ok: false, error: 'The sets marked as opened are not in this hand. Untick them or check the tiles.' };
     if (!candidates.length) return { ok: false, error: 'These tiles do not form a winning hand. Check for misread tiles.' };
     const results = candidates.map(c => finish(c, ctx));
     results.sort((a, b) => b.total - a.total);
     if (flowerJokers) results[0].flowerJokersPlaced = placed;
     return results[0];
+  }
+  // Mark the player's opened sets as revealed in an arrangement; null if the arrangement has no such set.
+  function markOpened(melds, opened) {
+    if (!opened.length) return melds;
+    const out = melds.slice();
+    for (const o of opened) {
+      const i = out.findIndex(m => m.type === o.type && m.k === o.k && m.concealed && !m.visible);
+      if (i < 0) return null;
+      out[i] = { ...out[i], exposed: true, concealed: false };
+    }
+    return out;
   }
   function fixJ(r, J) { // special structures use total jokers in the whole hand
     r.items = r.items.filter(i => i.no !== 8 && i.no !== 10 && i.no !== 11);
