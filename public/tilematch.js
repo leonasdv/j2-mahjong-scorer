@@ -7,6 +7,7 @@
   const NCH = 3, FLEN = FW * FH * NCH; // channels: black, red, green
   const DETECT_MAX = 800;            // photos are analysed at this max dimension
   const TILE_ASPECT = 0.74;          // tile width / height
+  const CANON_W = 30, CANON_H = 40;  // every tile is reduced to this size before its ink is classified
 
   /* ---------- pixel helpers ---------- */
   function downscale(img, maxDim) {
@@ -272,6 +273,8 @@
       const areas = split.map(areaOf).sort((a, b) => a - b), ref = areas[Math.floor(areas.length * 0.75)] || 0;
       for (let i = split.length - 1; i >= 0; i--) if (areaOf(split[i]) < ref * 0.45) split.splice(i, 1);
     }
+    // A piece cut out of a multi-tile blob can land on bare table (a sliver of the next row widened its box).
+    for (let i = split.length - 1; i >= 0; i--) if (inkFraction(small, split[i]) < 0.02) split.splice(i, 1);
     // reading order: group into rows by vertical centre, then left to right
     const th = median(split.map(b => Math.min(b.x1 - b.x0, b.y1 - b.y0)));
     split.sort((a, b) => (a.y0 + a.y1) - (b.y0 + b.y1));
@@ -308,7 +311,10 @@
   }
   // Ink maps (black, red, green) on a FWxFH grid, from an upright tile crop.
   function features(up) {
-    const W = FW * 2, H = FH * 2;
+    // Every tile is first reduced to the same small size. A close-up reference has glints and hollow
+    // centres (bamboo stalks) that a tile 70px wide in a group photo cannot show; low-passing both to one
+    // resolution makes them look alike before ink is classified.
+    const W = CANON_W, H = CANON_H;
     const inset = 0.07;
     const ix = Math.round(up.width * inset), iy = Math.round(up.height * inset);
     const body = crop(up, ix, iy, up.width - ix, up.height - iy);
@@ -317,8 +323,15 @@
     const out = new Float32Array(FLEN);
     for (let c = 0; c < NCH; c++) {
       const m = maps[c];
-      for (let y = 0; y < FH; y++) for (let x = 0; x < FW; x++)
-        out[c * FW * FH + y * FW + x] = (m[(2 * y) * W + 2 * x] + m[(2 * y) * W + 2 * x + 1] + m[(2 * y + 1) * W + 2 * x] + m[(2 * y + 1) * W + 2 * x + 1]) / 4;
+      for (let y = 0; y < FH; y++) for (let x = 0; x < FW; x++) { // area-average the maps onto the feature grid
+        const x0 = x * W / FW, x1 = (x + 1) * W / FW, y0 = y * H / FH, y1 = (y + 1) * H / FH;
+        let s = 0, wsum = 0;
+        for (let yy = Math.floor(y0); yy < Math.ceil(y1); yy++) for (let xx = Math.floor(x0); xx < Math.ceil(x1); xx++) {
+          const wgt = (Math.min(xx + 1, x1) - Math.max(xx, x0)) * (Math.min(yy + 1, y1) - Math.max(yy, y0));
+          s += m[yy * W + xx] * wgt; wsum += wgt;
+        }
+        out[c * FW * FH + y * FW + x] = s / wsum;
+      }
       blur(out, c * FW * FH);
     }
     return out;
